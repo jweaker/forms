@@ -5,12 +5,14 @@ import { Geist } from "next/font/google";
 
 import { Toaster } from "~/components/ui/sonner";
 import { TRPCReactProvider } from "~/trpc/react";
+import { ThemeProvider } from "~/components/theme-provider";
 import { Suspense } from "react";
 
 export const metadata: Metadata = {
-  title: "Forms - Create and Share Forms",
-  description: "Create, manage, and share custom forms with ease",
-  icons: [{ rel: "icon", url: "/favicon.ico" }],
+  title: "vibeForming - Create and Share Forms with Good Vibes",
+  description:
+    "Create, manage, and share custom forms with ease and positive energy",
+  icons: [{ rel: "icon", url: "/logo.png" }],
 };
 
 const geist = Geist({
@@ -24,12 +26,19 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geist.variable}`}>
+    <html lang="en" className={`${geist.variable}`} suppressHydrationWarning>
       <body>
-        <TRPCReactProvider>
-          <Suspense fallback={null}>{children}</Suspense>
-          <Toaster />
-        </TRPCReactProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <TRPCReactProvider>
+            <Suspense fallback={null}>{children}</Suspense>
+            <Toaster />
+          </TRPCReactProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

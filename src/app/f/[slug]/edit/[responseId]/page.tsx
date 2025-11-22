@@ -25,6 +25,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Star, ArrowLeft } from "lucide-react";
 import { MultiSelect } from "~/components/ui/multi-select";
+import { ThemeToggle } from "~/components/theme-toggle";
 
 type FormField = {
   id: number;
@@ -279,6 +280,19 @@ export default function EditSubmissionPage() {
   return (
     <div className="bg-background min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="container mx-auto max-w-2xl">
+        {/* Header with branding */}
+        <div className="mb-4 flex items-center justify-between sm:mb-6">
+          <h2 className="text-primary text-lg font-bold sm:text-xl">
+            vibeForming
+          </h2>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="text-muted-foreground text-xs sm:text-sm">
+              Edit your submission
+            </span>
+            <ThemeToggle />
+          </div>
+        </div>
+
         <Card>
           <CardHeader className="space-y-2">
             <div className="flex items-start justify-between gap-4">

@@ -25,6 +25,7 @@ import { useParams, useRouter } from "next/navigation";
 import { AlertCircle, Star, Github } from "lucide-react";
 import { authClient } from "~/server/better-auth/client";
 import { MultiSelect } from "~/components/ui/multi-select";
+import { ThemeToggle } from "~/components/theme-toggle";
 
 type FormField = {
   id: number;
@@ -366,6 +367,19 @@ export default function PublicFormPage() {
   return (
     <div className="bg-background min-h-screen px-3 py-4 sm:px-4 sm:py-8 lg:px-8">
       <div className="container mx-auto max-w-2xl">
+        {/* Header with branding */}
+        <div className="mb-4 flex items-center justify-between sm:mb-6">
+          <h2 className="text-primary text-lg font-bold sm:text-xl">
+            vibeForming
+          </h2>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="text-muted-foreground text-xs sm:text-sm">
+              Powered by good vibes
+            </span>
+            <ThemeToggle />
+          </div>
+        </div>
+
         <Card>
           <CardHeader className="space-y-2 p-4 sm:p-6">
             <div className="flex items-start justify-between gap-3 sm:gap-4">

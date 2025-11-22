@@ -32,7 +32,15 @@ export default function SuccessPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-2xl py-8">
+    <div className="container mx-auto max-w-2xl px-4 py-8">
+      {/* Header with branding */}
+      <div className="mb-8 text-center">
+        <h2 className="text-primary text-2xl font-bold">vibeForming</h2>
+        <p className="text-muted-foreground text-sm">
+          Form submitted successfully
+        </p>
+      </div>
+
       <Card>
         <CardContent className="py-16 text-center">
           <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">

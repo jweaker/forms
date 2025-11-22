@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { Github } from "lucide-react";
+import { ThemeToggle } from "~/components/theme-toggle";
 
 export default async function Home() {
   const session = await getSession();
@@ -25,11 +26,16 @@ export default async function Home() {
   return (
     <HydrateClient>
       <main className="bg-background flex min-h-screen items-center justify-center p-4">
+        {/* Theme toggle in top right */}
+        <div className="fixed top-4 right-4">
+          <ThemeToggle />
+        </div>
+
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-1 text-center">
-            <CardTitle className="text-3xl font-bold">Forms App</CardTitle>
+            <CardTitle className="text-3xl font-bold">vibeForming</CardTitle>
             <CardDescription>
-              Sign in to create and manage your forms
+              Sign in to create and manage your forms with good vibes
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

@@ -28,20 +28,24 @@ export const auth =
     }),
     baseURL: env.BETTER_AUTH_BASE_URL ?? "http://localhost:3000",
     secret: env.BETTER_AUTH_SECRET,
-    trustedOrigins: ["http://localhost:3000"],
+    trustedOrigins: [
+      "http://localhost:3000",
+      "https://vibeforming.com",
+      ...(env.BETTER_AUTH_BASE_URL ? [env.BETTER_AUTH_BASE_URL] : []),
+    ],
     account: {
       skipStateCookieCheck: true,
     },
     advanced: {
       cookiePrefix: "better-auth",
-      useSecureCookies: false, // Set to false for localhost
+      useSecureCookies: env.NODE_ENV === "production",
       crossSubDomainCookies: {
         enabled: false,
       },
       defaultCookieAttributes: {
         sameSite: "lax",
         httpOnly: true,
-        secure: false,
+        secure: env.NODE_ENV === "production",
         path: "/",
       },
     },

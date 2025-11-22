@@ -45,6 +45,7 @@ import {
 } from "~/lib/utils";
 import { UserMenu } from "~/components/user-menu";
 import { MySubmissions } from "./my-submissions";
+import { ThemeToggle } from "~/components/theme-toggle";
 
 type ViewMode = "grid" | "list";
 type DashboardTab = "forms" | "submissions";
@@ -203,13 +204,20 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex-shrink-0">
-          <h1 className="text-2xl font-bold sm:text-3xl">Dashboard</h1>
+          <div className="mb-1 flex items-center gap-2">
+            <h1 className="text-2xl font-bold sm:text-3xl">Dashboard</h1>
+            <span className="text-primary text-sm font-semibold sm:text-base">
+              • vibeForming
+            </span>
+          </div>
           <p className="text-muted-foreground text-xs sm:text-sm">
             Manage your forms and submissions
           </p>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Theme Toggle */}
+          <ThemeToggle />
           {/* User Menu */}
           <UserMenu />
         </div>
