@@ -11,6 +11,10 @@ export const forms = sqliteTable(
     status: d.text({ length: 50 }).default("draft").notNull(), // draft, published, archived
     isPublic: d.integer({ mode: "boolean" }).default(false).notNull(),
     allowAnonymous: d.integer({ mode: "boolean" }).default(true).notNull(),
+    allowMultipleSubmissions: d
+      .integer({ mode: "boolean" })
+      .default(true)
+      .notNull(),
     createdById: d
       .text({ length: 255 })
       .notNull()
@@ -42,8 +46,19 @@ export const formFields = sqliteTable(
     helpText: d.text(),
     required: d.integer({ mode: "boolean" }).default(false).notNull(),
     order: d.integer({ mode: "number" }).notNull().default(0),
-    regexPattern: d.text(), // For validation
+    // Validation
+    regexPattern: d.text(),
     validationMessage: d.text(),
+    // Multi-select configuration (for dropdown and checkbox-group)
+    allowMultiple: d.integer({ mode: "boolean" }).default(false),
+    selectionLimit: d.integer({ mode: "number" }), // Max selections for multi-select (nullable = no limit)
+    // Number/Range configuration
+    minValue: d.real(), // For number and range fields
+    maxValue: d.real(), // For number and range fields
+    // Default value (string for text, number for number/range, "true"/"false" for checkbox)
+    defaultValue: d.text(),
+    // Options stored as JSON array: [{label: string, isDefault: boolean}]
+    options: d.text(), // JSON string
     createdAt: d
       .integer({ mode: "timestamp" })
       .default(sql`(unixepoch())`)
@@ -54,24 +69,6 @@ export const formFields = sqliteTable(
     index("form_fields_form_id_idx").on(t.formId),
     index("form_fields_order_idx").on(t.formId, t.order),
   ],
-);
-export const formFieldOptions = sqliteTable(
-  "form_field_options",
-  (d) => ({
-    id: d.integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
-    formFieldId: d
-      .integer({ mode: "number" })
-      .notNull()
-      .references(() => formFields.id, { onDelete: "cascade" }),
-    optionLabel: d.text({ length: 256 }).notNull(),
-    optionValue: d.text({ length: 256 }).notNull(),
-    createdAt: d
-      .integer({ mode: "timestamp" })
-      .default(sql`(unixepoch())`)
-      .notNull(),
-    updatedAt: d.integer({ mode: "timestamp" }).$onUpdate(() => new Date()),
-  }),
-  (t) => [index("form_field_options_field_id_idx").on(t.formFieldId)],
 );
 // export const formResponsesFields = sqliteTable();
 export const formResponses = sqliteTable(
@@ -116,6 +113,7 @@ export const formResponseFields = sqliteTable(
       .integer({ mode: "number" })
       .notNull()
       .references(() => formFields.id, { onDelete: "cascade" }),
+    // Value can be a simple string or JSON array for multi-select
     value: d.text().notNull(),
     createdAt: d
       .integer({ mode: "timestamp" })
@@ -221,19 +219,8 @@ export const formsRelations = relations(forms, ({ one, many }) => ({
 
 export const formFieldsRelations = relations(formFields, ({ one, many }) => ({
   form: one(forms, { fields: [formFields.formId], references: [forms.id] }),
-  options: many(formFieldOptions),
   responseFields: many(formResponseFields),
 }));
-
-export const formFieldOptionsRelations = relations(
-  formFieldOptions,
-  ({ one }) => ({
-    formField: one(formFields, {
-      fields: [formFieldOptions.formFieldId],
-      references: [formFields.id],
-    }),
-  }),
-);
 
 export const formResponsesRelations = relations(
   formResponses,
