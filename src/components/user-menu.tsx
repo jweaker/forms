@@ -28,8 +28,8 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-10 gap-2">
-          <Avatar className="h-8 w-8">
+        <Button variant="ghost" className="relative h-9 gap-2 sm:h-10">
+          <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
             <AvatarImage
               src={session.user?.image ?? undefined}
               alt={session.user?.name ?? "User"}
