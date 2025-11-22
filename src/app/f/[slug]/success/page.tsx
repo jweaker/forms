@@ -3,13 +3,16 @@
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
-import { CheckCircle2 } from "lucide-react";
-import { useParams } from "next/navigation";
+import { CheckCircle2, History } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "~/trpc/react";
+import { authClient } from "~/server/better-auth/client";
 
 export default function SuccessPage() {
   const params = useParams();
+  const router = useRouter();
   const slug = params.slug as string;
+  const { data: session } = authClient.useSession();
 
   const { data: form, isLoading } = api.public.getFormBySlug.useQuery({ slug });
 
@@ -39,11 +42,22 @@ export default function SuccessPage() {
           <p className="text-muted-foreground mb-8">
             Your response has been submitted successfully.
           </p>
-          {form?.allowMultipleSubmissions && (
-            <Button onClick={() => (window.location.href = `/f/${slug}`)}>
-              Submit another response
-            </Button>
-          )}
+          <div className="flex flex-col items-center gap-3">
+            {form?.allowMultipleSubmissions && (
+              <Button onClick={() => (window.location.href = `/f/${slug}`)}>
+                Submit another response
+              </Button>
+            )}
+            {session?.user && (
+              <Button
+                variant="outline"
+                onClick={() => router.push("/dashboard?tab=submissions")}
+              >
+                <History className="mr-2 h-4 w-4" />
+                View Submission History
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>

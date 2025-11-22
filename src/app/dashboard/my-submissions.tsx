@@ -18,7 +18,10 @@ export function MySubmissions() {
       limit: 50,
     });
 
-  const submissions = submissionsData?.items ?? [];
+  const submissions = useMemo(
+    () => submissionsData?.items ?? [],
+    [submissionsData?.items],
+  );
 
   // Filter submissions based on search query
   const filteredSubmissions = useMemo(() => {

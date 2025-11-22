@@ -187,7 +187,25 @@ export default function FormBuilderPage() {
     },
   });
 
+  const batchSaveFieldsMutation = api.forms.batchSaveFields.useMutation({
+    onSuccess: (result) => {
+      if (result.versionChanged) {
+        toast.success(`Changes saved (new version ${result.newVersion})`);
+      } else {
+        toast.success("Changes saved successfully");
+      }
+      void utils.forms.getBySlug.invalidate({ slug });
+      setLocalFields(null); // Clear local state after successful save
+    },
+    onError: (error) => {
+      toast.error(`Failed to save changes: ${error.message}`);
+    },
+  });
+
   const utils = api.useUtils();
+
+  // Local fields state (null means use server data, array means local changes exist)
+  const [localFields, setLocalFields] = useState<FormField[] | null>(null);
 
   // Form state
   const [formName, setFormName] = useState("");
@@ -201,6 +219,8 @@ export default function FormBuilderPage() {
   const [allowMultipleSubmissions, setAllowMultipleSubmissions] =
     useState(true);
   const [allowEditing, setAllowEditing] = useState(false);
+  const [openTime, setOpenTime] = useState<Date | null>(null);
+  const [deadline, setDeadline] = useState<Date | null>(null);
 
   // Field dialog state
   const [fieldDialogOpen, setFieldDialogOpen] = useState(false);
@@ -248,6 +268,8 @@ export default function FormBuilderPage() {
       setAllowAnonymous(form.allowAnonymous);
       setAllowMultipleSubmissions(form.allowMultipleSubmissions ?? true);
       setAllowEditing(form.allowEditing ?? false);
+      setOpenTime(form.openTime ?? null);
+      setDeadline(form.deadline ?? null);
       // Reset slug manually edited flag when form loads
       setSlugManuallyEdited(false);
     }
@@ -284,18 +306,28 @@ export default function FormBuilderPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Check if form has changes
+  // Active fields (local changes if exist, otherwise server data)
+  const activeFields = localFields ?? form?.fields ?? [];
+
+  // Check if form has changes (including field changes)
   const hasChanges = useMemo(() => {
     if (!form) return false;
-    return (
+
+    const metadataChanged =
       formName !== form.name ||
       formSlug !== form.slug ||
       formDescription !== (form.description ?? "") ||
       formStatus !== form.status ||
       allowAnonymous !== form.allowAnonymous ||
       allowMultipleSubmissions !== (form.allowMultipleSubmissions ?? true) ||
-      allowEditing !== (form.allowEditing ?? false)
-    );
+      allowEditing !== (form.allowEditing ?? false) ||
+      openTime?.getTime() !== form.openTime?.getTime() ||
+      deadline?.getTime() !== form.deadline?.getTime();
+
+    // Check if fields have local changes
+    const fieldsChanged = localFields !== null;
+
+    return metadataChanged || fieldsChanged;
   }, [
     form,
     formName,
@@ -305,7 +337,105 @@ export default function FormBuilderPage() {
     allowAnonymous,
     allowMultipleSubmissions,
     allowEditing,
+    openTime,
+    deadline,
+    localFields,
   ]);
+
+  // Detect version-breaking changes
+  const hasVersionBreakingChanges = useMemo(() => {
+    if (!form || !localFields) return false;
+
+    // Helper to check if type change is incompatible
+    const isIncompatibleTypeChange = (
+      oldType: string,
+      newType: string,
+    ): boolean => {
+      if (oldType === newType) return false;
+
+      // Compatible type changes (same data format)
+      const compatiblePairs = [
+        ["text", "textarea"], // both store text
+        ["textarea", "text"], // both store text
+        ["text", "email"], // both store text
+        ["email", "text"], // both store text
+        ["text", "url"], // both store text
+        ["url", "text"], // both store text
+        ["text", "tel"], // both store text
+        ["tel", "text"], // both store text
+        ["number", "range"], // both store numbers
+        ["range", "number"], // both store numbers
+      ];
+
+      return !compatiblePairs.some(([a, b]) => a === oldType && b === newType);
+    };
+
+    // Helper to check if regex change invalidates data
+    const hasRegexInvalidation = (
+      oldRegex: string | null,
+      newRegex: string | null,
+    ): boolean => {
+      if (!oldRegex && newRegex) return true; // Adding new validation
+      if (oldRegex && newRegex && oldRegex !== newRegex) return true; // Changing validation
+      return false;
+    };
+
+    const serverFieldsMap = new Map(form.fields.map((f) => [f.id, f]));
+    const localFieldIds = new Set(localFields.map((f) => f.id));
+
+    // Check for deleted fields
+    for (const serverField of form.fields) {
+      if (!localFieldIds.has(serverField.id)) {
+        return true;
+      }
+    }
+
+    // Check for data-incompatible changes
+    for (const localField of localFields) {
+      const serverField = serverFieldsMap.get(localField.id);
+      if (serverField) {
+        // Check for incompatible type changes
+        if (isIncompatibleTypeChange(serverField.type, localField.type)) {
+          return true;
+        }
+
+        // Check for validation changes that can invalidate data
+        if (
+          hasRegexInvalidation(
+            serverField.regexPattern,
+            localField.regexPattern,
+          )
+        ) {
+          return true;
+        }
+
+        // Check if field becomes required
+        if (!serverField.required && localField.required) {
+          return true;
+        }
+
+        // Check if min/max constraints become stricter
+        if (serverField.type === "number" || serverField.type === "range") {
+          const oldMin = serverField.minValue;
+          const oldMax = serverField.maxValue;
+          const newMin = localField.minValue;
+          const newMax = localField.maxValue;
+
+          // Min increases or max decreases = stricter constraints
+          if (
+            (newMin !== null && (oldMin === null || newMin > oldMin)) ||
+            (newMax !== null && (oldMax === null || newMax < oldMax))
+          ) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }, [form, localFields]);
+
+  // Check if form has changes
 
   const resetFieldDialog = () => {
     setFieldLabel("");
@@ -467,7 +597,7 @@ export default function FormBuilderPage() {
       validationMessage: supportsValidation
         ? fieldValidationMessage || undefined
         : undefined,
-      options: hasOptions ? validOptions : undefined,
+      options: hasOptions ? JSON.stringify(validOptions) : undefined,
       allowMultiple: fieldTypeSupportsMultiSelect(fieldType)
         ? fieldAllowMultiple
         : undefined,
@@ -480,64 +610,160 @@ export default function FormBuilderPage() {
       defaultValue: fieldDefaultValue || undefined,
     };
 
+    // Initialize local fields if not already done
+    const currentFields = localFields ?? form?.fields ?? [];
+
     if (fieldDialogMode === "create") {
       if (!form) return;
-      createFieldMutation.mutate({
+
+      // Create a temporary ID for new fields (negative to distinguish from server IDs)
+      const tempId = -(currentFields.length + 1);
+      const newField: FormField = {
+        id: tempId,
         formId: form.id,
+        order: currentFields.length,
+        createdAt: new Date(),
+        updatedAt: null,
         ...fieldData,
-      });
+        placeholder: fieldData.placeholder ?? null,
+        helpText: fieldData.helpText ?? null,
+        regexPattern: fieldData.regexPattern ?? null,
+        validationMessage: fieldData.validationMessage ?? null,
+        options: fieldData.options ?? null,
+        allowMultiple: fieldData.allowMultiple ?? null,
+        selectionLimit: fieldData.selectionLimit ?? null,
+        minValue: fieldData.minValue ?? null,
+        maxValue: fieldData.maxValue ?? null,
+        defaultValue: fieldData.defaultValue ?? null,
+      };
+
+      setLocalFields([...currentFields, newField]);
+      toast.success("Field added (not saved yet)");
+      setFieldDialogOpen(false);
+      resetFieldDialog();
     } else if (editingFieldId) {
-      updateFieldMutation.mutate({
-        fieldId: editingFieldId,
-        ...fieldData,
-      });
+      // Update existing field in local state
+      const updatedFields = currentFields.map((f) =>
+        f.id === editingFieldId
+          ? {
+              ...f,
+              ...fieldData,
+              placeholder: fieldData.placeholder ?? null,
+              helpText: fieldData.helpText ?? null,
+              regexPattern: fieldData.regexPattern ?? null,
+              validationMessage: fieldData.validationMessage ?? null,
+              options: fieldData.options ?? null,
+              allowMultiple: fieldData.allowMultiple ?? null,
+              selectionLimit: fieldData.selectionLimit ?? null,
+              minValue: fieldData.minValue ?? null,
+              maxValue: fieldData.maxValue ?? null,
+              defaultValue: fieldData.defaultValue ?? null,
+              updatedAt: new Date(),
+            }
+          : f,
+      );
+
+      setLocalFields(updatedFields);
+      toast.success("Field updated (not saved yet)");
+      setFieldDialogOpen(false);
+      resetFieldDialog();
     }
   };
 
   const handleDeleteField = (fieldId: number) => {
-    toast(
-      <div className="flex flex-col gap-2">
-        <p className="font-semibold">Delete this field?</p>
-        <p className="text-muted-foreground text-sm">
-          This action cannot be undone.
-        </p>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => {
-              deleteFieldMutation.mutate({ fieldId });
-              toast.dismiss();
-            }}
-          >
-            Delete
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => toast.dismiss()}>
-            Cancel
-          </Button>
-        </div>
-      </div>,
-      { duration: 10000 },
-    );
+    // Delete from local state
+    const currentFields = localFields ?? form?.fields ?? [];
+    const updatedFields = currentFields.filter((f) => f.id !== fieldId);
+    setLocalFields(updatedFields);
+    toast.success("Field deleted (not saved yet)");
   };
 
   const handleDuplicateField = (fieldId: number) => {
-    duplicateFieldMutation.mutate({ fieldId });
+    // Duplicate in local state
+    const currentFields = localFields ?? form?.fields ?? [];
+    const fieldToDuplicate = currentFields.find((f) => f.id === fieldId);
+
+    if (!fieldToDuplicate || !form) return;
+
+    const tempId = -(currentFields.length + 1);
+    const duplicatedField: FormField = {
+      ...fieldToDuplicate,
+      id: tempId,
+      label: `${fieldToDuplicate.label} (Copy)`,
+      order: currentFields.length,
+      createdAt: new Date(),
+      updatedAt: null,
+    };
+
+    setLocalFields([...currentFields, duplicatedField]);
+    toast.success("Field duplicated (not saved yet)");
   };
 
-  const handleSaveForm = () => {
+  const handleSaveForm = async () => {
     if (!form) return;
-    updateFormMutation.mutate({
-      id: form.id,
-      name: formName,
-      slug: formSlug,
-      description: formDescription || undefined,
-      status: formStatus,
-      isPublic: true, // All forms are public now
-      allowAnonymous,
-      allowMultipleSubmissions,
-      allowEditing,
-    });
+
+    try {
+      // Save form metadata if changed
+      const metadataChanged =
+        formName !== form.name ||
+        formSlug !== form.slug ||
+        formDescription !== (form.description ?? "") ||
+        formStatus !== form.status ||
+        allowAnonymous !== form.allowAnonymous ||
+        allowMultipleSubmissions !== (form.allowMultipleSubmissions ?? true) ||
+        allowEditing !== (form.allowEditing ?? false) ||
+        openTime?.getTime() !== form.openTime?.getTime() ||
+        deadline?.getTime() !== form.deadline?.getTime();
+
+      if (metadataChanged) {
+        await updateFormMutation.mutateAsync({
+          id: form.id,
+          name: formName,
+          slug: formSlug,
+          description: formDescription || undefined,
+          status: formStatus,
+          isPublic: true,
+          allowAnonymous,
+          allowMultipleSubmissions,
+          allowEditing,
+          openTime,
+          deadline,
+        });
+      }
+
+      // Save fields if changed
+      if (localFields !== null) {
+        await batchSaveFieldsMutation.mutateAsync({
+          formId: form.id,
+          fields: localFields.map((f, index) => ({
+            id: f.id > 0 ? f.id : undefined, // Only include ID for existing fields
+            label: f.label,
+            type: f.type,
+            placeholder: f.placeholder,
+            helpText: f.helpText,
+            required: f.required,
+            order: index,
+            regexPattern: f.regexPattern,
+            validationMessage: f.validationMessage,
+            allowMultiple: f.allowMultiple ?? undefined,
+            selectionLimit: f.selectionLimit ?? undefined,
+            minValue: f.minValue ?? undefined,
+            maxValue: f.maxValue ?? undefined,
+            defaultValue: f.defaultValue ?? undefined,
+            options: f.options ?? undefined,
+          })),
+          openTime,
+          deadline,
+        });
+      }
+
+      // Show success only if no mutations were triggered
+      if (!metadataChanged && localFields === null) {
+        toast.success("No changes to save");
+      }
+    } catch {
+      // Errors are handled by mutation's onError
+    }
   };
 
   const handlePublish = async () => {
@@ -643,14 +869,16 @@ export default function FormBuilderPage() {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
-    if (over && active.id !== over.id && form?.fields) {
-      const oldIndex = form.fields.findIndex((field) => field.id === active.id);
-      const newIndex = form.fields.findIndex((field) => field.id === over.id);
+    if (over && active.id !== over.id) {
+      const currentFields = localFields ?? form?.fields ?? [];
+      const oldIndex = currentFields.findIndex(
+        (field) => field.id === active.id,
+      );
+      const newIndex = currentFields.findIndex((field) => field.id === over.id);
 
-      const newOrder = arrayMove(form.fields, oldIndex, newIndex);
-      const fieldIds = newOrder.map((field) => field.id);
-
-      reorderFieldsMutation.mutate({ formId: form.id, fieldIds });
+      const newOrder = arrayMove(currentFields, oldIndex, newIndex);
+      setLocalFields(newOrder);
+      toast.success("Fields reordered (not saved yet)");
     }
   };
 
@@ -758,56 +986,37 @@ export default function FormBuilderPage() {
         setAllowAnonymous(formData.allowAnonymous);
         setAllowMultipleSubmissions(formData.allowMultipleSubmissions);
 
-        // Delete all existing fields
-        if (form.fields.length > 0) {
-          toast.loading("Removing old fields...", { id: progressToast });
-          await Promise.all(
-            form.fields.map((field) =>
-              deleteFieldMutation.mutateAsync({ fieldId: field.id }),
-            ),
-          );
-        }
+        // Convert AI fields to local FormField objects
+        const newFields: FormField[] = fieldsData.map((field, index) => ({
+          id: -(index + 1), // Temporary negative IDs
+          formId: form.id,
+          label: field.label,
+          type: field.type,
+          required: field.required,
+          placeholder: field.placeholder ?? null,
+          helpText: field.helpText ?? null,
+          order: index,
+          regexPattern: field.regexPattern ?? null,
+          validationMessage: field.validationMessage ?? null,
+          options: field.options ? JSON.stringify(field.options) : null,
+          allowMultiple: field.allowMultiple ?? null,
+          selectionLimit: field.selectionLimit ?? null,
+          minValue: field.minValue ?? null,
+          maxValue: field.maxValue ?? null,
+          defaultValue: field.defaultValue ?? null,
+          createdAt: new Date(),
+          updatedAt: null,
+        }));
 
-        // Create new fields from AI response
-        if (fieldsData.length > 0) {
-          toast.loading(
-            `Creating ${fieldsData.length} field${fieldsData.length > 1 ? "s" : ""}...`,
-            { id: progressToast },
-          );
+        setLocalFields(newFields);
 
-          for (const field of fieldsData) {
-            await createFieldMutation.mutateAsync({
-              formId: form.id,
-              label: field.label,
-              type: field.type,
-              required: field.required,
-              placeholder: field.placeholder,
-              helpText: field.helpText,
-              defaultValue: field.defaultValue,
-              options: field.options,
-              regexPattern: field.regexPattern,
-              validationMessage: field.validationMessage,
-              allowMultiple: field.allowMultiple,
-              selectionLimit: field.selectionLimit,
-              minValue: field.minValue,
-              maxValue: field.maxValue,
-            });
-          }
-        }
-
-        toast.success("Form generated successfully!", { id: progressToast });
+        toast.success(
+          "Form generated successfully! Click Save to apply changes.",
+          { id: progressToast },
+        );
         setAiDialogOpen(false);
         setAiPrompt("");
         setAiError(null);
-
-        // Refresh form data
-        const finalSlug = updatedForm?.slug ?? formData.slug;
-        await utils.forms.getBySlug.invalidate({ slug: finalSlug });
-
-        // Navigate to new slug if it changed
-        if (updatedForm && updatedForm.slug !== slug) {
-          router.replace(`/forms/${updatedForm.slug}/edit`);
-        }
       } catch (updateError) {
         toast.dismiss(progressToast);
         throw updateError;
@@ -873,7 +1082,7 @@ export default function FormBuilderPage() {
                 {form.status}
               </Badge>
               <span>•</span>
-              <span>{form.fields.length} fields</span>
+              <span>{activeFields.length} fields</span>
             </div>
           </div>
         </div>
@@ -946,10 +1155,28 @@ export default function FormBuilderPage() {
           <Button
             size="sm"
             onClick={handleSaveForm}
-            disabled={!hasChanges || updateFormMutation.isPending}
+            disabled={
+              !hasChanges ||
+              updateFormMutation.isPending ||
+              batchSaveFieldsMutation.isPending
+            }
+            className="relative"
           >
-            <Save className="mr-2 h-3.5 w-3.5" />
+            {updateFormMutation.isPending ||
+            batchSaveFieldsMutation.isPending ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-3.5 w-3.5" />
+            )}
             Save
+            {hasVersionBreakingChanges && (
+              <Badge
+                variant="destructive"
+                className="ml-2 h-4 px-1 text-[10px] font-normal"
+              >
+                New Version
+              </Badge>
+            )}
           </Button>
         </div>
       </div>
@@ -1040,6 +1267,83 @@ export default function FormBuilderPage() {
                   onCheckedChange={setAllowEditing}
                 />
               </div>
+              <Separator />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="open-time">Open Time (Optional)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="open-time"
+                      type="datetime-local"
+                      value={
+                        openTime
+                          ? new Date(
+                              openTime.getTime() -
+                                openTime.getTimezoneOffset() * 60000,
+                            )
+                              .toISOString()
+                              .slice(0, 16)
+                          : ""
+                      }
+                      onChange={(e) =>
+                        setOpenTime(
+                          e.target.value ? new Date(e.target.value) : null,
+                        )
+                      }
+                      className="flex-1"
+                    />
+                    {openTime && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setOpenTime(null)}
+                      >
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    Form will be open from this time
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="deadline">Deadline (Optional)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="deadline"
+                      type="datetime-local"
+                      value={
+                        deadline
+                          ? new Date(
+                              deadline.getTime() -
+                                deadline.getTimezoneOffset() * 60000,
+                            )
+                              .toISOString()
+                              .slice(0, 16)
+                          : ""
+                      }
+                      onChange={(e) =>
+                        setDeadline(
+                          e.target.value ? new Date(e.target.value) : null,
+                        )
+                      }
+                      className="flex-1"
+                    />
+                    {deadline && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setDeadline(null)}
+                      >
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    Form will close after this time
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -1069,7 +1373,7 @@ export default function FormBuilderPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {form.fields.length === 0 ? (
+              {activeFields.length === 0 ? (
                 <div className="text-muted-foreground py-12 text-center">
                   <Sparkles className="text-muted-foreground/50 mx-auto mb-4 h-12 w-12" />
                   <p className="mb-2 text-lg font-medium">No fields yet</p>
@@ -1110,11 +1414,11 @@ export default function FormBuilderPage() {
                   onDragEnd={handleDragEnd}
                 >
                   <SortableContext
-                    items={form.fields.map((f) => f.id)}
+                    items={activeFields.map((f) => f.id)}
                     strategy={verticalListSortingStrategy}
                   >
                     <div className="space-y-2">
-                      {form.fields.map((field) => (
+                      {activeFields.map((field) => (
                         <SortableFieldItem
                           key={field.id}
                           field={field}
@@ -1151,9 +1455,9 @@ export default function FormBuilderPage() {
                   </p>
                 )}
               </div>
-              {form.fields.length > 0 && (
+              {activeFields.length > 0 && (
                 <div className="space-y-4">
-                  {form.fields.map((field) => (
+                  {activeFields.map((field) => (
                     <div key={field.id} className="space-y-1.5">
                       <Label className="text-sm">
                         {field.label}
@@ -1585,8 +1889,8 @@ export default function FormBuilderPage() {
                 <p className="text-muted-foreground">
                   Current form has{" "}
                   <strong>
-                    {form.fields.length} field
-                    {form.fields.length !== 1 ? "s" : ""}
+                    {activeFields.length} field
+                    {activeFields.length !== 1 ? "s" : ""}
                   </strong>
                   . You can add, remove, or modify fields while keeping the rest
                   intact.
@@ -1606,7 +1910,7 @@ export default function FormBuilderPage() {
               <Textarea
                 id="ai-prompt"
                 placeholder={
-                  form.fields.length > 0
+                  activeFields.length > 0
                     ? 'Examples:\n• "Add a phone number field after email"\n• "Make the address field optional"\n• "Remove the company field"\n• "Add validation to the email field"'
                     : 'Examples:\n• "Create a job application form with name, email, resume upload, and cover letter"\n• "Make a customer feedback survey with ratings"\n• "Build a registration form for an event"'
                 }
@@ -1617,7 +1921,7 @@ export default function FormBuilderPage() {
                 className="resize-none"
               />
               <p className="text-muted-foreground text-xs">
-                {form.fields.length > 0
+                {activeFields.length > 0
                   ? "Be specific about what you want to change. The AI will preserve fields you don't mention."
                   : "Describe the purpose and required fields. The AI will create an appropriate form structure."}
               </p>

@@ -19,6 +19,9 @@ export const forms = sqliteTable(
       .integer({ mode: "boolean" })
       .default(sql`0`)
       .notNull(),
+    openTime: d.integer({ mode: "timestamp" }),
+    deadline: d.integer({ mode: "timestamp" }),
+    currentVersion: d.integer({ mode: "number" }).default(1).notNull(),
     createdById: d
       .text({ length: 255 })
       .notNull()
@@ -50,6 +53,7 @@ export const formFields = sqliteTable(
     helpText: d.text(),
     required: d.integer({ mode: "boolean" }).default(false).notNull(),
     order: d.integer({ mode: "number" }).notNull().default(0),
+    version: d.integer({ mode: "number" }).default(1).notNull(),
     // Validation
     regexPattern: d.text(),
     validationMessage: d.text(),
@@ -69,10 +73,7 @@ export const formFields = sqliteTable(
       .notNull(),
     updatedAt: d.integer({ mode: "timestamp" }).$onUpdate(() => new Date()),
   }),
-  (t) => [
-    index("form_fields_form_id_idx").on(t.formId),
-    index("form_fields_order_idx").on(t.formId, t.order),
-  ],
+  (t) => [],
 );
 // export const formResponsesFields = sqliteTable();
 export const formResponses = sqliteTable(
@@ -83,6 +84,7 @@ export const formResponses = sqliteTable(
       .integer({ mode: "number" })
       .notNull()
       .references(() => forms.id, { onDelete: "cascade" }),
+    formVersion: d.integer({ mode: "number" }).default(1).notNull(),
     // Nullable for guest submissions
     createdById: d
       .text({ length: 255 })
@@ -152,6 +154,24 @@ export const formResponseHistory = sqliteTable(
     index("form_response_history_created_at_idx").on(t.createdAt),
   ],
 );
+
+// Form version history - stores snapshots of form structure
+export const formVersionHistory = sqliteTable("form_version_history", (d) => ({
+  id: d.integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
+  formId: d
+    .integer({ mode: "number" })
+    .notNull()
+    .references(() => forms.id, { onDelete: "cascade" }),
+  version: d.integer({ mode: "number" }).notNull(),
+  snapshot: d.text().notNull(), // JSON: {name, description, fields: [...]}
+  createdById: d
+    .text({ length: 255 })
+    .references(() => user.id, { onDelete: "set null" }),
+  createdAt: d
+    .integer({ mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+}));
 
 // Better Auth core tables
 export const user = sqliteTable("user", (d) => ({
@@ -244,6 +264,7 @@ export const formsRelations = relations(forms, ({ one, many }) => ({
   createdBy: one(user, { fields: [forms.createdById], references: [user.id] }),
   fields: many(formFields),
   responses: many(formResponses),
+  versionHistory: many(formVersionHistory),
 }));
 
 export const formFieldsRelations = relations(formFields, ({ one, many }) => ({
@@ -290,6 +311,20 @@ export const formResponseHistoryRelations = relations(
     }),
     editedBy: one(user, {
       fields: [formResponseHistory.editedById],
+      references: [user.id],
+    }),
+  }),
+);
+
+export const formVersionHistoryRelations = relations(
+  formVersionHistory,
+  ({ one }) => ({
+    form: one(forms, {
+      fields: [formVersionHistory.formId],
+      references: [forms.id],
+    }),
+    createdBy: one(user, {
+      fields: [formVersionHistory.createdById],
       references: [user.id],
     }),
   }),

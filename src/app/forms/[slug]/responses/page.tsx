@@ -19,6 +19,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -30,14 +37,17 @@ import {
   Calendar,
   User,
   Star,
+  Filter,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { formatDate, formatRelativeTime } from "~/lib/utils";
+import { useState, useMemo } from "react";
 
 export default function ResponsesPage() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
+  const [versionFilter, setVersionFilter] = useState<string>("all");
 
   const { data: form, isLoading: formLoading } = api.forms.getBySlug.useQuery(
     {
@@ -47,14 +57,37 @@ export default function ResponsesPage() {
       enabled: !!slug,
     },
   );
+
+  // Get all available versions from version history
+  const { data: versionHistory } = api.forms.getVersionHistory.useQuery(
+    { formId: form?.id ?? 0 },
+    { enabled: !!form?.id },
+  );
+
+  // Get the form version for the filtered version (if filtering)
+  const { data: filteredFormVersion } = api.forms.getFormVersion.useQuery(
+    {
+      formId: form?.id ?? 0,
+      version:
+        versionFilter === "all"
+          ? (form?.currentVersion ?? 1)
+          : parseInt(versionFilter),
+    },
+    {
+      enabled: !!form?.id,
+    },
+  );
+
   const { data: responsesData, isLoading: responsesLoading } =
     api.formResponses.list.useQuery(
       {
         formId: form?.id ?? 0,
         limit: 100,
+        version: versionFilter === "all" ? undefined : parseInt(versionFilter),
       },
       {
         enabled: !!form?.id,
+        refetchOnMount: true,
       },
     );
 
@@ -71,6 +104,37 @@ export default function ResponsesPage() {
   });
 
   const utils = api.useUtils();
+
+  // Get responses data - must be before any conditional returns (Rules of Hooks)
+  const responses = responsesData?.items ?? [];
+  const totalResponses = responsesData?.total ?? 0;
+
+  // Use filtered version fields if filtering, otherwise use current form fields
+  const displayFields = filteredFormVersion?.fields ?? form?.fields ?? [];
+
+  // Get unique versions - from version history and current form
+  const availableVersions = useMemo(() => {
+    const versions = new Set<number>();
+
+    // Add current version
+    if (form?.currentVersion) {
+      versions.add(form.currentVersion);
+    }
+
+    // Add versions from history
+    if (versionHistory) {
+      versionHistory.forEach((vh) => versions.add(vh.version));
+    }
+
+    // Add versions from responses (in case of data inconsistency)
+    responses.forEach((response) => {
+      if (response.formVersion) {
+        versions.add(response.formVersion);
+      }
+    });
+
+    return Array.from(versions).sort((a, b) => b - a); // Sort descending
+  }, [form?.currentVersion, versionHistory, responses]);
 
   const handleDeleteResponse = (responseId: number) => {
     if (confirm("Are you sure you want to delete this response?")) {
@@ -154,9 +218,6 @@ export default function ResponsesPage() {
     );
   }
 
-  const responses = responsesData?.items ?? [];
-  const totalResponses = responsesData?.total ?? 0;
-
   return (
     <div className="container mx-auto py-8">
       <div className="mb-8 flex items-center justify-between">
@@ -174,6 +235,22 @@ export default function ResponsesPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {availableVersions.length > 0 && (
+            <Select value={versionFilter} onValueChange={setVersionFilter}>
+              <SelectTrigger className="w-[180px]">
+                <Filter className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="All versions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All versions</SelectItem>
+                {availableVersions.map((version) => (
+                  <SelectItem key={version} value={version.toString()}>
+                    Version {version}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Button
             variant="outline"
             onClick={() => router.push(`/forms/${slug}/edit`)}
@@ -197,15 +274,31 @@ export default function ResponsesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalResponses}</div>
+            {versionFilter !== "all" && (
+              <p className="text-muted-foreground mt-1 text-xs">
+                For version {versionFilter}
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Form Fields</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {versionFilter === "all" ? "Current Version" : "Viewing Version"}
+            </CardTitle>
             <Calendar className="text-muted-foreground h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{form.fields.length}</div>
+            <div className="text-2xl font-bold">
+              v
+              {versionFilter === "all"
+                ? (form.currentVersion ?? 1)
+                : versionFilter}
+            </div>
+            <p className="text-muted-foreground mt-1 text-xs">
+              {displayFields.length} field
+              {displayFields.length !== 1 ? "s" : ""}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -247,13 +340,16 @@ export default function ResponsesPage() {
                   <TableRow>
                     <TableHead>Submitted</TableHead>
                     <TableHead>User</TableHead>
+                    {availableVersions.length > 1 && (
+                      <TableHead>Version</TableHead>
+                    )}
                     <TableHead>Rating</TableHead>
                     <TableHead>IP Address</TableHead>
-                    {form.fields.slice(0, 2).map((field) => (
+                    {displayFields.slice(0, 2).map((field) => (
                       <TableHead key={field.id}>{field.label}</TableHead>
                     ))}
-                    {form.fields.length > 2 && (
-                      <TableHead>+{form.fields.length - 2} more</TableHead>
+                    {displayFields.length > 2 && (
+                      <TableHead>+{displayFields.length - 2} more</TableHead>
                     )}
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -311,6 +407,13 @@ export default function ResponsesPage() {
                             </div>
                           </div>
                         </TableCell>
+                        {availableVersions.length > 1 && (
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              v{response.formVersion ?? 1}
+                            </Badge>
+                          </TableCell>
+                        )}
                         <TableCell>
                           <div className="flex items-center gap-1">
                             {response.rating ? (
@@ -332,14 +435,14 @@ export default function ResponsesPage() {
                             {response.ipAddress ?? "-"}
                           </span>
                         </TableCell>
-                        {form.fields.slice(0, 2).map((field) => (
+                        {displayFields.slice(0, 2).map((field) => (
                           <TableCell key={field.id}>
                             <div className="max-w-[200px] truncate text-sm">
                               {fieldValues.get(field.id) ?? "-"}
                             </div>
                           </TableCell>
                         ))}
-                        {form.fields.length > 2 && (
+                        {displayFields.length > 2 && (
                           <TableCell>
                             <span className="text-muted-foreground text-xs">
                               ...

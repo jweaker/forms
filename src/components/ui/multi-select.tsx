@@ -140,6 +140,20 @@ export function MultiSelect({
             />
           </div>
           <div className="max-h-64 overflow-auto px-2 pb-2">
+            {selected.length > 0 && (
+              <div className="mb-2 px-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange([]);
+                  }}
+                  className="text-muted-foreground hover:text-foreground text-xs underline transition-colors"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
             {filteredOptions.length === 0 ? (
               <div className="text-muted-foreground py-8 text-center">
                 <p className="text-sm font-medium">No options found</p>

@@ -318,6 +318,51 @@ export default function PublicFormPage() {
     );
   }
 
+  // Check if form is not yet open
+  const now = new Date();
+  if (form.openTime && now < new Date(form.openTime)) {
+    const openDate = new Date(form.openTime);
+    return (
+      <div className="container mx-auto max-w-2xl py-8">
+        <Card>
+          <CardContent className="py-16 text-center">
+            <AlertCircle className="text-muted-foreground mx-auto h-12 w-12" />
+            <h2 className="mt-4 text-2xl font-semibold">Form Not Yet Open</h2>
+            <p className="text-muted-foreground mt-2">
+              This form will open on{" "}
+              <strong>
+                {openDate.toLocaleDateString()} at{" "}
+                {openDate.toLocaleTimeString()}
+              </strong>
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Check if form is past deadline
+  if (form.deadline && now > new Date(form.deadline)) {
+    const deadlineDate = new Date(form.deadline);
+    return (
+      <div className="container mx-auto max-w-2xl py-8">
+        <Card>
+          <CardContent className="py-16 text-center">
+            <AlertCircle className="text-muted-foreground mx-auto h-12 w-12" />
+            <h2 className="mt-4 text-2xl font-semibold">Form Closed</h2>
+            <p className="text-muted-foreground mt-2">
+              This form closed on{" "}
+              <strong>
+                {deadlineDate.toLocaleDateString()} at{" "}
+                {deadlineDate.toLocaleTimeString()}
+              </strong>
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-background min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="container mx-auto max-w-2xl">
@@ -558,20 +603,35 @@ function renderFormField(
 
       // Single select dropdown
       return (
-        <Select value={stringValue} onValueChange={onChange}>
-          <SelectTrigger id={`field-${field.id}`}>
-            <SelectValue
-              placeholder={field.placeholder ?? "Select an option"}
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((opt, index) => (
-              <SelectItem key={index} value={opt.label}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="space-y-2">
+          <Select
+            value={stringValue || undefined}
+            onValueChange={(val) => onChange(val === "__clear__" ? "" : val)}
+          >
+            <SelectTrigger id={`field-${field.id}`}>
+              <SelectValue
+                placeholder={field.placeholder ?? "Select an option"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {stringValue && !field.required && (
+                <>
+                  <SelectItem value="__clear__">
+                    <span className="text-muted-foreground italic">
+                      Clear selection
+                    </span>
+                  </SelectItem>
+                  <div className="border-border my-1 border-t" />
+                </>
+              )}
+              {options.map((opt, index) => (
+                <SelectItem key={index} value={opt.label}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       );
 
     case "radio":

@@ -19,7 +19,7 @@ import { FormFieldDisplay } from "~/components/form-field-display";
 import { Label } from "~/components/ui/label";
 import { Badge } from "~/components/ui/badge";
 import { Separator } from "~/components/ui/separator";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export default function ResponseDetailPage() {
   const params = useParams();
@@ -34,6 +34,19 @@ export default function ResponseDetailPage() {
   const { data: response, isLoading } = api.formResponses.getById.useQuery({
     responseId,
   });
+
+  // Get the form version that matches this response
+  const responseVersion = response?.formVersion ?? 1;
+  const { data: formVersion, isLoading: isLoadingVersion } =
+    api.forms.getFormVersion.useQuery(
+      {
+        formId: response?.form.id ?? 0,
+        version: responseVersion,
+      },
+      {
+        enabled: !!response?.form.id,
+      },
+    );
 
   const { data: history } = api.formResponses.getHistory.useQuery(
     { responseId },
@@ -79,7 +92,7 @@ export default function ResponseDetailPage() {
 
   const handleBack = () => {
     // Check if there's a referrer and it's from our app
-    if (document.referrer && document.referrer.includes(window.location.host)) {
+    if (document.referrer?.includes(window.location.host)) {
       router.back();
     } else {
       // Default to form responses page
@@ -164,10 +177,13 @@ export default function ResponseDetailPage() {
               )}
             </div>
             <div className="space-y-1 text-right">
-              <p className="text-sm font-medium">Date</p>
+              <p className="text-sm font-medium">Submitted</p>
               <p className="text-muted-foreground text-sm">
                 {formatRelativeTime(response.createdAt)}
               </p>
+              <Badge variant="outline" className="mt-1">
+                Version {responseVersion}
+              </Badge>
             </div>
           </div>
         </CardHeader>
@@ -215,20 +231,40 @@ export default function ResponseDetailPage() {
           ) : (
             <div className="space-y-6 py-6">
               {response.responseFields.map((responseField) => {
-                const field = responseField.formField;
+                // Try to get field definition from the version snapshot
+                const versionField = formVersion?.fields.find(
+                  (f) => f.id === responseField.formFieldId,
+                );
+                // Fallback to current form field if version field not found
+                const field = versionField ?? responseField.formField;
+
+                // Only show "Field changed" badge if version is loaded and field wasn't found
+                const showFieldChangedBadge =
+                  !isLoadingVersion && !versionField;
+
                 return (
-                  <div key={field.id} className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      {field.label}
-                      {field.required && (
-                        <span
-                          className="text-muted-foreground ml-1 text-xs font-normal"
-                          aria-label="Required field"
+                  <div key={responseField.formFieldId} className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm font-medium">
+                        {field.label}
+                        {field.required && (
+                          <span
+                            className="text-muted-foreground ml-1 text-xs font-normal"
+                            aria-label="Required field"
+                          >
+                            (required)
+                          </span>
+                        )}
+                      </Label>
+                      {showFieldChangedBadge && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-amber-100 text-xs text-amber-800 dark:bg-amber-900 dark:text-amber-100"
                         >
-                          (required)
-                        </span>
+                          Field changed
+                        </Badge>
                       )}
-                    </Label>
+                    </div>
                     <FormFieldDisplay
                       field={field}
                       value={responseField.value}
@@ -312,9 +348,10 @@ export default function ResponseDetailPage() {
                         // Compare with previous version
                         const nextVersion = history[index - 1];
                         if (nextVersion) {
-                          let nextData: typeof historyData;
                           try {
-                            nextData = JSON.parse(nextVersion.data);
+                            const nextData = JSON.parse(
+                              nextVersion.data,
+                            ) as typeof historyData;
                             historyData.fields.forEach((field) => {
                               const nextField = nextData.fields.find(
                                 (f) => f.fieldId === field.fieldId,

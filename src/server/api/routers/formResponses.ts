@@ -58,6 +58,23 @@ export const formResponsesRouter = createTRPCRouter({
         });
       }
 
+      // Check if form is not yet open
+      if (form.openTime && new Date() < form.openTime) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This form is not yet open for responses",
+        });
+      }
+
+      // Check if deadline has passed
+      if (form.deadline && new Date() > form.deadline) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "This form is no longer accepting responses (deadline passed)",
+        });
+      }
+
       // Check if anonymous submissions are allowed
       if (!ctx.session?.user && !form.allowAnonymous) {
         throw new TRPCError({
@@ -200,6 +217,7 @@ export const formResponsesRouter = createTRPCRouter({
         .insert(formResponses)
         .values({
           formId: input.formId,
+          formVersion: form.currentVersion, // Store the current form version
           createdById: ctx.session?.user?.id,
           submitterEmail: input.submitterEmail,
           isAnonymous: input.isAnonymous,
@@ -414,6 +432,7 @@ export const formResponsesRouter = createTRPCRouter({
         formId: z.number(),
         limit: z.number().min(1).max(100).default(20),
         offset: z.number().min(0).default(0),
+        version: z.number().optional(), // Optional version filter
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -432,9 +451,17 @@ export const formResponsesRouter = createTRPCRouter({
         });
       }
 
+      // Build where clause with optional version filter
+      const whereClause = input.version
+        ? and(
+            eq(formResponses.formId, input.formId),
+            eq(formResponses.formVersion, input.version),
+          )
+        : eq(formResponses.formId, input.formId);
+
       // Get responses with pagination
       const responses = await ctx.db.query.formResponses.findMany({
-        where: eq(formResponses.formId, input.formId),
+        where: whereClause,
         orderBy: [desc(formResponses.createdAt)],
         limit: input.limit,
         offset: input.offset,
@@ -458,7 +485,7 @@ export const formResponsesRouter = createTRPCRouter({
       const countResult = await ctx.db
         .select({ count: sql<number>`count(*)` })
         .from(formResponses)
-        .where(eq(formResponses.formId, input.formId));
+        .where(whereClause);
 
       const total = countResult[0]?.count ?? 0;
 

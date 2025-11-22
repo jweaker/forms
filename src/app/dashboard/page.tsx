@@ -15,7 +15,13 @@ import {
 } from "~/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/tabs";
 import { toast } from "sonner";
-import { useState, useMemo } from "react";
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useTransition,
+} from "react";
 import {
   LayoutGrid,
   List,
@@ -30,7 +36,8 @@ import {
   FileText,
   MessageSquare,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   formatRelativeTime,
   copyToClipboard,
@@ -44,15 +51,23 @@ type DashboardTab = "forms" | "submissions";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>("forms");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [searchQuery, setSearchQuery] = useState("");
-  const { data: forms, isLoading } = api.forms.list.useQuery();
+
+  const { data: forms, isLoading } = api.forms.list.useQuery(undefined, {
+    staleTime: 60 * 1000, // Cache for 60 seconds
+  });
+
   const createFormMutation = api.forms.create.useMutation({
     onSuccess: (newForm) => {
       if (newForm) {
         toast.success("Form created successfully");
-        router.push(`/forms/${newForm.slug}/edit`);
+        startTransition(() => {
+          router.push(`/forms/${newForm.slug}/edit`);
+        });
       }
     },
     onError: (error) => {
@@ -75,7 +90,9 @@ export default function DashboardPage() {
       if (newForm) {
         toast.success("Form duplicated successfully");
         void utils.forms.list.invalidate();
-        router.push(`/forms/${newForm.slug}/edit`);
+        startTransition(() => {
+          router.push(`/forms/${newForm.slug}/edit`);
+        });
       }
     },
     onError: (error) => {
@@ -85,53 +102,67 @@ export default function DashboardPage() {
 
   const utils = api.useUtils();
 
-  const handleCreateForm = () => {
+  // Read tab from URL parameter on mount
+  useEffect(() => {
+    const tab = searchParams?.get("tab");
+    if (tab === "submissions" || tab === "forms") {
+      setDashboardTab(tab);
+    }
+  }, [searchParams]);
+
+  const handleCreateForm = useCallback(() => {
     createFormMutation.mutate({
       name: "Untitled Form",
       description: "",
       isPublic: false,
       allowAnonymous: true,
     });
-  };
+  }, [createFormMutation]);
 
-  const handleDeleteForm = (id: number, name: string) => {
-    toast(
-      <div className="flex flex-col gap-2">
-        <p className="font-semibold">Delete &quot;{name}&quot;?</p>
-        <p className="text-muted-foreground text-sm">
-          This action cannot be undone.
-        </p>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => {
-              deleteFormMutation.mutate({ id });
-              toast.dismiss();
-            }}
-          >
-            Delete
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => toast.dismiss()}>
-            Cancel
-          </Button>
-        </div>
-      </div>,
-      {
-        duration: 10000,
-      },
-    );
-  };
+  const handleDeleteForm = useCallback(
+    (id: number, name: string) => {
+      toast(
+        <div className="flex flex-col gap-2">
+          <p className="font-semibold">Delete &quot;{name}&quot;?</p>
+          <p className="text-muted-foreground text-sm">
+            This action cannot be undone.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => {
+                deleteFormMutation.mutate({ id });
+                toast.dismiss();
+              }}
+            >
+              Delete
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => toast.dismiss()}>
+              Cancel
+            </Button>
+          </div>
+        </div>,
+        {
+          duration: 10000,
+        },
+      );
+    },
+    [deleteFormMutation],
+  );
 
-  const handleDuplicateForm = (id: number) => {
-    duplicateFormMutation.mutate({ id });
-  };
+  const handleDuplicateForm = useCallback(
+    (id: number) => {
+      duplicateFormMutation.mutate({ id });
+    },
+    [duplicateFormMutation],
+  );
 
-  const handleCopyLink = (slug: string) => {
+  const handleCopyLink = useCallback((slug: string) => {
     const url = getPublicFormUrl(slug);
     void copyToClipboard(url);
     toast.success("Link copied to clipboard");
-  };
+  }, []);
 
   // Filter forms based on search query
   const filteredForms = useMemo(() => {
@@ -385,22 +416,27 @@ export default function DashboardPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => router.push(`/forms/${form.slug}/edit`)}
+                        asChild
                         className="h-8 flex-1 text-xs"
                       >
-                        <Edit className="mr-1.5 h-3.5 w-3.5" />
-                        Edit
+                        <Link href={`/forms/${form.slug}/edit`} prefetch={true}>
+                          <Edit className="mr-1.5 h-3.5 w-3.5" />
+                          Edit
+                        </Link>
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          router.push(`/forms/${form.slug}/responses`)
-                        }
+                        asChild
                         className="h-8 flex-1 text-xs"
                       >
-                        <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
-                        Responses
+                        <Link
+                          href={`/forms/${form.slug}/responses`}
+                          prefetch={true}
+                        >
+                          <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+                          Responses
+                        </Link>
                       </Button>
                     </div>
                   </CardContent>

@@ -5,6 +5,7 @@ import { Geist } from "next/font/google";
 
 import { Toaster } from "~/components/ui/sonner";
 import { TRPCReactProvider } from "~/trpc/react";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Forms - Create and Share Forms",
@@ -15,6 +16,8 @@ export const metadata: Metadata = {
 const geist = Geist({
   subsets: ["latin"],
   variable: "--font-geist-sans",
+  display: "swap", // Add font-display swap for faster text rendering
+  preload: true,
 });
 
 export default function RootLayout({
@@ -24,7 +27,7 @@ export default function RootLayout({
     <html lang="en" className={`${geist.variable}`}>
       <body>
         <TRPCReactProvider>
-          {children}
+          <Suspense fallback={null}>{children}</Suspense>
           <Toaster />
         </TRPCReactProvider>
       </body>
