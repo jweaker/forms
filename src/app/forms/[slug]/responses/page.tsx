@@ -40,6 +40,7 @@ import {
   Filter,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { formatDate, formatRelativeTime } from "~/lib/utils";
 import { useState, useMemo } from "react";
 
@@ -222,12 +223,10 @@ export default function ResponsesPage() {
     <div className="container mx-auto py-8">
       <div className="mb-8 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push("/dashboard")}
-          >
-            <ArrowLeft className="h-4 w-4" />
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/dashboard">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
           </Button>
           <div>
             <h1 className="text-3xl font-bold">{form.name}</h1>
@@ -251,11 +250,10 @@ export default function ResponsesPage() {
               </SelectContent>
             </Select>
           )}
-          <Button
-            variant="outline"
-            onClick={() => router.push(`/forms/${slug}/edit`)}
-          >
-            Edit Form
+          <Button variant="outline" asChild>
+            <Link href={`/forms/${slug}/edit`} prefetch={true}>
+              Edit Form
+            </Link>
           </Button>
           <Button onClick={handleExportCSV} disabled={responses.length === 0}>
             <Download className="mr-2 h-4 w-4" />

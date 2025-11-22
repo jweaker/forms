@@ -14,6 +14,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { formatRelativeTime } from "~/lib/utils";
 import { FormFieldDisplay } from "~/components/form-field-display";
 import { Label } from "~/components/ui/label";
@@ -146,8 +147,10 @@ export default function ResponseDetailPage() {
     <div className="container mx-auto max-w-3xl py-8">
       {/* Header */}
       <div className="mb-6 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={handleBack}>
-          <ArrowLeft className="h-4 w-4" />
+        <Button variant="ghost" size="icon" asChild>
+          <Link href={`/forms/${slug}/responses`}>
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold">{response.form.name}</h1>

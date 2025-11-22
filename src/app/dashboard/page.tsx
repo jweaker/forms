@@ -52,7 +52,7 @@ type DashboardTab = "forms" | "submissions";
 export default function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>("forms");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [searchQuery, setSearchQuery] = useState("");
@@ -486,22 +486,27 @@ export default function DashboardPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          router.push(`/forms/${form.slug}/responses`)
-                        }
+                        asChild
                         className="h-9"
                       >
-                        <BarChart3 className="mr-2 h-4 w-4" />
-                        Responses
+                        <Link
+                          href={`/forms/${form.slug}/responses`}
+                          prefetch={true}
+                        >
+                          <BarChart3 className="mr-2 h-4 w-4" />
+                          Responses
+                        </Link>
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => router.push(`/forms/${form.slug}/edit`)}
+                        asChild
                         className="h-9"
                       >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
+                        <Link href={`/forms/${form.slug}/edit`} prefetch={true}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </Link>
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

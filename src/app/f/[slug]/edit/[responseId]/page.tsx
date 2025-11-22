@@ -22,6 +22,7 @@ import { Alert, AlertDescription } from "~/components/ui/alert";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { AlertCircle, Star, ArrowLeft } from "lucide-react";
 import { MultiSelect } from "~/components/ui/multi-select";
 
@@ -261,12 +262,11 @@ export default function EditSubmissionPage() {
               {error?.message ??
                 "The response you are trying to edit does not exist or you do not have permission to edit it."}
             </p>
-            <Button
-              className="mt-4"
-              onClick={() => router.push("/dashboard?tab=submissions")}
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Submissions
+            <Button className="mt-4" asChild>
+              <Link href="/dashboard?tab=submissions" prefetch={true}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Submissions
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -292,13 +292,11 @@ export default function EditSubmissionPage() {
                   </p>
                 )}
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => router.push("/dashboard?tab=submissions")}
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
+              <Button size="sm" variant="ghost" asChild>
+                <Link href="/dashboard?tab=submissions" prefetch={true}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Link>
               </Button>
             </div>
             <Alert>

@@ -4,13 +4,13 @@ import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
 import { CheckCircle2, History } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import Link from "next/link";
 import { api } from "~/trpc/react";
 import { authClient } from "~/server/better-auth/client";
 
 export default function SuccessPage() {
   const params = useParams();
-  const router = useRouter();
   const slug = params.slug as string;
   const { data: session } = authClient.useSession();
 
@@ -49,12 +49,11 @@ export default function SuccessPage() {
               </Button>
             )}
             {session?.user && (
-              <Button
-                variant="outline"
-                onClick={() => router.push("/dashboard?tab=submissions")}
-              >
-                <History className="mr-2 h-4 w-4" />
-                View Submission History
+              <Button variant="outline" asChild>
+                <Link href="/dashboard?tab=submissions" prefetch={true}>
+                  <History className="mr-2 h-4 w-4" />
+                  View Submission History
+                </Link>
               </Button>
             )}
           </div>

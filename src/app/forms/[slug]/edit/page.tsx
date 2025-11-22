@@ -54,6 +54,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { copyToClipboard, getPublicFormUrl } from "~/lib/utils";
 import {
   FIELD_TYPE_LABELS,
@@ -1065,12 +1066,10 @@ export default function FormBuilderPage() {
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push("/dashboard")}
-          >
-            <ArrowLeft className="h-4 w-4" />
+          <Button variant="ghost" size="icon" asChild>
+            <Link href="/dashboard">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
           </Button>
           <div>
             <h1 className="text-2xl font-bold">{form.name}</h1>
@@ -1087,13 +1086,11 @@ export default function FormBuilderPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push(`/forms/${slug}/responses`)}
-          >
-            <BarChart3 className="mr-2 h-3.5 w-3.5" />
-            Responses
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/forms/${slug}/responses`} prefetch={true}>
+              <BarChart3 className="mr-2 h-3.5 w-3.5" />
+              Responses
+            </Link>
           </Button>
           <Button variant="outline" size="sm" onClick={handleCopyLink}>
             <Copy className="mr-2 h-3.5 w-3.5" />
