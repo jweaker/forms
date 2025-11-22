@@ -274,7 +274,7 @@ export const verification = sqliteTable(
       .$defaultFn(() => crypto.randomUUID()),
     identifier: d.text({ length: 255 }).notNull(),
     value: d.text({ length: 255 }).notNull(),
-    expiresAt: d.integer({ mode: "timestamp" }).notNull(),
+    expiresAt: d.integer({ mode: "timestamp_ms" }).notNull(),
     createdAt: d
       .integer({ mode: "timestamp" })
       .default(sql`(unixepoch())`)

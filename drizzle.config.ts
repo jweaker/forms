@@ -11,5 +11,5 @@ export default {
     url: env.DATABASE_URL,
     authToken: env.DATABASE_AUTH_TOKEN,
   },
-  tablesFilter: ["forms_*"],
+  // Remove tablesFilter to include all tables (Better Auth needs user, account, session, verification tables)
 } satisfies Config;
