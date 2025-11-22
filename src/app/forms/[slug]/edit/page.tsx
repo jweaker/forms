@@ -47,6 +47,11 @@ import {
   ExternalLink,
   Upload,
   Check,
+  Archive,
+  ArchiveX,
+  BarChart3,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { copyToClipboard, getPublicFormUrl } from "~/lib/utils";
@@ -78,6 +83,10 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import {
+  deserializeFormFromAI,
+  type AIFormStructure,
+} from "~/lib/ai-form-utils";
 
 type FormField = {
   id: number;
@@ -106,13 +115,19 @@ type FieldDialogMode = "create" | "edit";
 export default function FormBuilderPage() {
   const params = useParams();
   const router = useRouter();
-  const formId = parseInt(params.id as string);
+  const slug = params.slug as string;
 
-  const { data: form, isLoading } = api.forms.getById.useQuery({ id: formId });
+  const { data: form, isLoading } = api.forms.getBySlug.useQuery({ slug });
   const updateFormMutation = api.forms.update.useMutation({
-    onSuccess: () => {
+    onSuccess: (updatedForm) => {
       toast.success("Form updated successfully");
-      void utils.forms.getById.invalidate({ id: formId });
+
+      // If slug changed, navigate to new URL without reload
+      if (updatedForm && updatedForm.slug !== slug) {
+        router.replace(`/forms/${updatedForm.slug}/edit`);
+      } else {
+        void utils.forms.getBySlug.invalidate({ slug });
+      }
     },
     onError: (error) => {
       toast.error(`Failed to update form: ${error.message}`);
@@ -122,7 +137,7 @@ export default function FormBuilderPage() {
   const createFieldMutation = api.formFields.create.useMutation({
     onSuccess: () => {
       toast.success("Field created successfully");
-      void utils.forms.getById.invalidate({ id: formId });
+      void utils.forms.getBySlug.invalidate({ slug });
       setFieldDialogOpen(false);
       resetFieldDialog();
     },
@@ -134,7 +149,7 @@ export default function FormBuilderPage() {
   const updateFieldMutation = api.formFields.update.useMutation({
     onSuccess: () => {
       toast.success("Field updated successfully");
-      void utils.forms.getById.invalidate({ id: formId });
+      void utils.forms.getBySlug.invalidate({ slug });
       setFieldDialogOpen(false);
       resetFieldDialog();
     },
@@ -146,7 +161,7 @@ export default function FormBuilderPage() {
   const deleteFieldMutation = api.formFields.delete.useMutation({
     onSuccess: () => {
       toast.success("Field deleted successfully");
-      void utils.forms.getById.invalidate({ id: formId });
+      void utils.forms.getBySlug.invalidate({ slug });
     },
     onError: (error) => {
       toast.error(`Failed to delete field: ${error.message}`);
@@ -155,7 +170,7 @@ export default function FormBuilderPage() {
 
   const reorderFieldsMutation = api.formFields.reorder.useMutation({
     onSuccess: () => {
-      void utils.forms.getById.invalidate({ id: formId });
+      void utils.forms.getBySlug.invalidate({ slug });
     },
     onError: (error) => {
       toast.error(`Failed to reorder fields: ${error.message}`);
@@ -165,7 +180,7 @@ export default function FormBuilderPage() {
   const duplicateFieldMutation = api.formFields.duplicate.useMutation({
     onSuccess: () => {
       toast.success("Field duplicated successfully");
-      void utils.forms.getById.invalidate({ id: formId });
+      void utils.forms.getBySlug.invalidate({ slug });
     },
     onError: (error) => {
       toast.error(`Failed to duplicate field: ${error.message}`);
@@ -176,6 +191,8 @@ export default function FormBuilderPage() {
 
   // Form state
   const [formName, setFormName] = useState("");
+  const [formSlug, setFormSlug] = useState("");
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [formDescription, setFormDescription] = useState("");
   const [formStatus, setFormStatus] = useState<
     "draft" | "published" | "archived"
@@ -183,6 +200,7 @@ export default function FormBuilderPage() {
   const [allowAnonymous, setAllowAnonymous] = useState(true);
   const [allowMultipleSubmissions, setAllowMultipleSubmissions] =
     useState(true);
+  const [allowEditing, setAllowEditing] = useState(false);
 
   // Field dialog state
   const [fieldDialogOpen, setFieldDialogOpen] = useState(false);
@@ -207,6 +225,12 @@ export default function FormBuilderPage() {
   const [fieldMaxValue, setFieldMaxValue] = useState<string>("");
   const [fieldDefaultValue, setFieldDefaultValue] = useState<string>("");
 
+  // AI Generation state
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   // Drag and drop sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -218,30 +242,69 @@ export default function FormBuilderPage() {
   useEffect(() => {
     if (form) {
       setFormName(form.name);
+      setFormSlug(form.slug);
       setFormDescription(form.description ?? "");
       setFormStatus(form.status as "draft" | "published" | "archived");
       setAllowAnonymous(form.allowAnonymous);
       setAllowMultipleSubmissions(form.allowMultipleSubmissions ?? true);
+      setAllowEditing(form.allowEditing ?? false);
+      // Reset slug manually edited flag when form loads
+      setSlugManuallyEdited(false);
     }
   }, [form]);
+
+  // Helper function to generate slug from name
+  const generateSlug = (name: string) => {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, "") // Remove special characters
+      .replace(/\s+/g, "-") // Replace spaces with hyphens
+      .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
+      .replace(/^-+|-+$/g, ""); // Remove leading/trailing hyphens
+  };
+
+  // Auto-generate slug from name if not manually edited
+  useEffect(() => {
+    if (!slugManuallyEdited && formName) {
+      setFormSlug(generateSlug(formName));
+    }
+  }, [formName, slugManuallyEdited]);
+
+  // Keyboard shortcut for AI dialog (Cmd/Ctrl + K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setAiDialogOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Check if form has changes
   const hasChanges = useMemo(() => {
     if (!form) return false;
     return (
       formName !== form.name ||
+      formSlug !== form.slug ||
       formDescription !== (form.description ?? "") ||
       formStatus !== form.status ||
       allowAnonymous !== form.allowAnonymous ||
-      allowMultipleSubmissions !== (form.allowMultipleSubmissions ?? true)
+      allowMultipleSubmissions !== (form.allowMultipleSubmissions ?? true) ||
+      allowEditing !== (form.allowEditing ?? false)
     );
   }, [
     form,
     formName,
+    formSlug,
     formDescription,
     formStatus,
     allowAnonymous,
     allowMultipleSubmissions,
+    allowEditing,
   ]);
 
   const resetFieldDialog = () => {
@@ -418,8 +481,9 @@ export default function FormBuilderPage() {
     };
 
     if (fieldDialogMode === "create") {
+      if (!form) return;
       createFieldMutation.mutate({
-        formId,
+        formId: form.id,
         ...fieldData,
       });
     } else if (editingFieldId) {
@@ -462,30 +526,115 @@ export default function FormBuilderPage() {
   };
 
   const handleSaveForm = () => {
+    if (!form) return;
     updateFormMutation.mutate({
-      id: formId,
+      id: form.id,
       name: formName,
+      slug: formSlug,
       description: formDescription || undefined,
       status: formStatus,
       isPublic: true, // All forms are public now
       allowAnonymous,
       allowMultipleSubmissions,
+      allowEditing,
     });
   };
 
   const handlePublish = async () => {
+    if (!form) return;
     // Save any pending changes first, then publish
     try {
-      await updateFormMutation.mutateAsync({
-        id: formId,
+      const updatedForm = await updateFormMutation.mutateAsync({
+        id: form.id,
         name: formName,
+        slug: formSlug,
         description: formDescription || undefined,
         status: "published",
         isPublic: true,
         allowAnonymous,
         allowMultipleSubmissions,
+        allowEditing,
       });
       setFormStatus("published");
+
+      // If slug changed, navigate to new URL
+      if (updatedForm && updatedForm.slug !== slug) {
+        router.replace(`/forms/${updatedForm.slug}/edit`);
+      }
+    } catch {
+      // Error is already handled by mutation's onError
+    }
+  };
+
+  const handleUnpublish = async () => {
+    if (!form) return;
+    try {
+      const updatedForm = await updateFormMutation.mutateAsync({
+        id: form.id,
+        name: formName,
+        slug: formSlug,
+        description: formDescription || undefined,
+        status: "draft",
+        isPublic: true,
+        allowAnonymous,
+        allowMultipleSubmissions,
+      });
+      setFormStatus("draft");
+
+      // If slug changed, navigate to new URL
+      if (updatedForm && updatedForm.slug !== slug) {
+        router.replace(`/forms/${updatedForm.slug}/edit`);
+      }
+    } catch {
+      // Error is already handled by mutation's onError
+    }
+  };
+
+  const handleArchive = async () => {
+    if (!form) return;
+    try {
+      const updatedForm = await updateFormMutation.mutateAsync({
+        id: form.id,
+        name: formName,
+        slug: formSlug,
+        description: formDescription || undefined,
+        status: "draft",
+        isPublic: true,
+        allowAnonymous,
+        allowMultipleSubmissions,
+        allowEditing,
+      });
+      setFormStatus("archived");
+
+      // If slug changed, navigate to new URL
+      if (updatedForm && updatedForm.slug !== slug) {
+        router.replace(`/forms/${updatedForm.slug}/edit`);
+      }
+    } catch {
+      // Error is already handled by mutation's onError
+    }
+  };
+
+  const handleUnarchive = async () => {
+    if (!form) return;
+    try {
+      const updatedForm = await updateFormMutation.mutateAsync({
+        id: form.id,
+        name: formName,
+        slug: formSlug,
+        description: formDescription || undefined,
+        status: "draft",
+        isPublic: true,
+        allowAnonymous,
+        allowMultipleSubmissions,
+        allowEditing,
+      });
+      setFormStatus("draft");
+
+      // If slug changed, navigate to new URL
+      if (updatedForm && updatedForm.slug !== slug) {
+        router.replace(`/forms/${updatedForm.slug}/edit`);
+      }
     } catch {
       // Error is already handled by mutation's onError
     }
@@ -501,7 +650,7 @@ export default function FormBuilderPage() {
       const newOrder = arrayMove(form.fields, oldIndex, newIndex);
       const fieldIds = newOrder.map((field) => field.id);
 
-      reorderFieldsMutation.mutate({ formId, fieldIds });
+      reorderFieldsMutation.mutate({ formId: form.id, fieldIds });
     }
   };
 
@@ -521,6 +670,156 @@ export default function FormBuilderPage() {
     setFieldValidationMessage(validationTemplate.message);
     setSelectedTemplate(template);
     toast.success(`Applied ${validationTemplate.label} validation`);
+  };
+
+  const handleAIGenerate = async () => {
+    if (!form) {
+      toast.error("Form not found");
+      return;
+    }
+
+    const trimmedPrompt = aiPrompt.trim();
+
+    // Validate prompt
+    if (!trimmedPrompt) {
+      toast.error("Please enter a prompt");
+      return;
+    }
+
+    if (trimmedPrompt.length < 10) {
+      setAiError(
+        "Please provide a more detailed description (at least 10 characters)",
+      );
+      return;
+    }
+
+    if (trimmedPrompt.length > 2000) {
+      setAiError("Prompt is too long. Please keep it under 2000 characters.");
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError(null);
+
+    try {
+      // Call API - backend will append existing form to prompt if needed
+      const response = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: trimmedPrompt,
+          formSlug: form.slug, // Backend uses this to fetch and append form to prompt
+        }),
+      });
+
+      if (!response.ok) {
+        const error: unknown = await response.json();
+        const errorObj = error as { error?: string; details?: string };
+        const errorMessage = errorObj.details
+          ? `${errorObj.error ?? "Failed to generate form"}\n\n${errorObj.details}`
+          : (errorObj.error ?? "Failed to generate form");
+        throw new Error(errorMessage);
+      }
+
+      const data = (await response.json()) as { form: AIFormStructure };
+      const aiFormStructure = data.form;
+
+      // Validate that we got fields back
+      if (!aiFormStructure.fields || aiFormStructure.fields.length === 0) {
+        throw new Error(
+          "AI did not generate any fields. Please try again with a more specific prompt.",
+        );
+      }
+
+      // Deserialize AI response to app format
+      const { form: formData, fields: fieldsData } =
+        deserializeFormFromAI(aiFormStructure);
+
+      // Show progress toast
+      const progressToast = toast.loading("Updating form...");
+
+      try {
+        // Update form settings
+        const updatedForm = await updateFormMutation.mutateAsync({
+          id: form.id,
+          name: formData.name,
+          slug: formData.slug,
+          description: formData.description,
+          status: form.status as "draft" | "published" | "archived",
+          isPublic: form.isPublic,
+          allowAnonymous: formData.allowAnonymous,
+          allowMultipleSubmissions: formData.allowMultipleSubmissions,
+        });
+
+        // Update local form state to reflect changes immediately
+        setFormName(formData.name);
+        setFormSlug(formData.slug);
+        setFormDescription(formData.description ?? "");
+        setAllowAnonymous(formData.allowAnonymous);
+        setAllowMultipleSubmissions(formData.allowMultipleSubmissions);
+
+        // Delete all existing fields
+        if (form.fields.length > 0) {
+          toast.loading("Removing old fields...", { id: progressToast });
+          await Promise.all(
+            form.fields.map((field) =>
+              deleteFieldMutation.mutateAsync({ fieldId: field.id }),
+            ),
+          );
+        }
+
+        // Create new fields from AI response
+        if (fieldsData.length > 0) {
+          toast.loading(
+            `Creating ${fieldsData.length} field${fieldsData.length > 1 ? "s" : ""}...`,
+            { id: progressToast },
+          );
+
+          for (const field of fieldsData) {
+            await createFieldMutation.mutateAsync({
+              formId: form.id,
+              label: field.label,
+              type: field.type,
+              required: field.required,
+              placeholder: field.placeholder,
+              helpText: field.helpText,
+              defaultValue: field.defaultValue,
+              options: field.options,
+              regexPattern: field.regexPattern,
+              validationMessage: field.validationMessage,
+              allowMultiple: field.allowMultiple,
+              selectionLimit: field.selectionLimit,
+              minValue: field.minValue,
+              maxValue: field.maxValue,
+            });
+          }
+        }
+
+        toast.success("Form generated successfully!", { id: progressToast });
+        setAiDialogOpen(false);
+        setAiPrompt("");
+        setAiError(null);
+
+        // Refresh form data
+        const finalSlug = updatedForm?.slug ?? formData.slug;
+        await utils.forms.getBySlug.invalidate({ slug: finalSlug });
+
+        // Navigate to new slug if it changed
+        if (updatedForm && updatedForm.slug !== slug) {
+          router.replace(`/forms/${updatedForm.slug}/edit`);
+        }
+      } catch (updateError) {
+        toast.dismiss(progressToast);
+        throw updateError;
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to generate form";
+      setAiError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   if (isLoading) {
@@ -579,6 +878,14 @@ export default function FormBuilderPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push(`/forms/${slug}/responses`)}
+          >
+            <BarChart3 className="mr-2 h-3.5 w-3.5" />
+            Responses
+          </Button>
           <Button variant="outline" size="sm" onClick={handleCopyLink}>
             <Copy className="mr-2 h-3.5 w-3.5" />
             Copy Link
@@ -591,7 +898,29 @@ export default function FormBuilderPage() {
             <ExternalLink className="mr-2 h-3.5 w-3.5" />
             Preview
           </Button>
-          {formStatus !== "published" && (
+
+          {/* Status control buttons */}
+          {formStatus === "published" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUnpublish}
+              disabled={updateFormMutation.isPending}
+            >
+              <ArchiveX className="mr-2 h-3.5 w-3.5" />
+              Unpublish
+            </Button>
+          ) : formStatus === "archived" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUnarchive}
+              disabled={updateFormMutation.isPending}
+            >
+              <ArchiveX className="mr-2 h-3.5 w-3.5" />
+              Unarchive
+            </Button>
+          ) : (
             <Button
               size="sm"
               onClick={handlePublish}
@@ -601,6 +930,19 @@ export default function FormBuilderPage() {
               Publish
             </Button>
           )}
+
+          {formStatus !== "archived" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleArchive}
+              disabled={updateFormMutation.isPending}
+            >
+              <Archive className="mr-2 h-3.5 w-3.5" />
+              Archive
+            </Button>
+          )}
+
           <Button
             size="sm"
             onClick={handleSaveForm}
@@ -635,22 +977,19 @@ export default function FormBuilderPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="form-status">Status</Label>
-                  <Select
-                    value={formStatus}
-                    onValueChange={(v: string) =>
-                      setFormStatus(v as typeof formStatus)
-                    }
-                  >
-                    <SelectTrigger id="form-status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="published">Published</SelectItem>
-                      <SelectItem value="archived">Archived</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="form-slug">Slug (URL Path)</Label>
+                  <Input
+                    id="form-slug"
+                    value={formSlug}
+                    onChange={(e) => {
+                      setFormSlug(e.target.value);
+                      setSlugManuallyEdited(true);
+                    }}
+                    placeholder="my-form"
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    URL: /f/{formSlug || "your-slug"}
+                  </p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -689,6 +1028,18 @@ export default function FormBuilderPage() {
                   onCheckedChange={setAllowMultipleSubmissions}
                 />
               </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Allow Editing Submissions</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Users can edit their previous submissions
+                  </p>
+                </div>
+                <Switch
+                  checked={allowEditing}
+                  onCheckedChange={setAllowEditing}
+                />
+              </div>
             </CardContent>
           </Card>
 
@@ -697,17 +1048,59 @@ export default function FormBuilderPage() {
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Form Fields</CardTitle>
-                <Button size="sm" onClick={handleOpenCreateField}>
-                  <Plus className="mr-2 h-3.5 w-3.5" />
-                  Add Field
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAiDialogOpen(true)}
+                    className="relative"
+                  >
+                    <Sparkles className="mr-2 h-3.5 w-3.5" />
+                    AI Generate
+                    <kbd className="bg-muted ml-2 hidden rounded border px-1.5 py-0.5 font-mono text-xs sm:inline-block">
+                      ⌘K
+                    </kbd>
+                  </Button>
+                  <Button size="sm" onClick={handleOpenCreateField}>
+                    <Plus className="mr-2 h-3.5 w-3.5" />
+                    Add Field
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               {form.fields.length === 0 ? (
                 <div className="text-muted-foreground py-12 text-center">
-                  <p className="text-sm">
-                    No fields yet. Add your first field to get started.
+                  <Sparkles className="text-muted-foreground/50 mx-auto mb-4 h-12 w-12" />
+                  <p className="mb-2 text-lg font-medium">No fields yet</p>
+                  <p className="text-muted-foreground mb-4 text-sm">
+                    Get started by using AI to generate your form or add fields
+                    manually.
+                  </p>
+                  <div className="flex justify-center gap-2">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => setAiDialogOpen(true)}
+                    >
+                      <Sparkles className="mr-2 h-3.5 w-3.5" />
+                      Generate with AI
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleOpenCreateField}
+                    >
+                      <Plus className="mr-2 h-3.5 w-3.5" />
+                      Add Field Manually
+                    </Button>
+                  </div>
+                  <p className="text-muted-foreground mt-4 text-xs">
+                    Tip: Press{" "}
+                    <kbd className="bg-muted rounded border px-1.5 py-0.5 font-mono text-xs">
+                      ⌘K
+                    </kbd>{" "}
+                    to open AI generator
                   </p>
                 </div>
               ) : (
@@ -1162,6 +1555,124 @@ export default function FormBuilderPage() {
               }
             >
               {fieldDialogMode === "create" ? "Add Field" : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Generation Dialog */}
+      <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="text-primary h-5 w-5" />
+              AI Form Generation
+            </DialogTitle>
+            <DialogDescription>
+              {form.fields.length > 0
+                ? "Describe how you'd like to modify this form. The AI will intelligently update your form based on your instructions."
+                : "Describe the form you want to create. The AI will generate a complete form with appropriate fields based on your description."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {form.fields.length > 0 && (
+              <div className="bg-muted rounded-lg p-3 text-sm">
+                <p className="mb-1 flex items-center gap-2 font-medium">
+                  <Sparkles className="h-4 w-4" />
+                  Edit Mode Active
+                </p>
+                <p className="text-muted-foreground">
+                  Current form has{" "}
+                  <strong>
+                    {form.fields.length} field
+                    {form.fields.length !== 1 ? "s" : ""}
+                  </strong>
+                  . You can add, remove, or modify fields while keeping the rest
+                  intact.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="ai-prompt">Your Instructions</Label>
+                <span
+                  className={`text-xs ${aiPrompt.length > 2000 ? "text-destructive" : "text-muted-foreground"}`}
+                >
+                  {aiPrompt.length} / 2000
+                </span>
+              </div>
+              <Textarea
+                id="ai-prompt"
+                placeholder={
+                  form.fields.length > 0
+                    ? 'Examples:\n• "Add a phone number field after email"\n• "Make the address field optional"\n• "Remove the company field"\n• "Add validation to the email field"'
+                    : 'Examples:\n• "Create a job application form with name, email, resume upload, and cover letter"\n• "Make a customer feedback survey with ratings"\n• "Build a registration form for an event"'
+                }
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                disabled={aiLoading}
+                rows={6}
+                className="resize-none"
+              />
+              <p className="text-muted-foreground text-xs">
+                {form.fields.length > 0
+                  ? "Be specific about what you want to change. The AI will preserve fields you don't mention."
+                  : "Describe the purpose and required fields. The AI will create an appropriate form structure."}
+              </p>
+            </div>
+
+            {aiError && (
+              <div className="bg-destructive/10 text-destructive rounded-lg p-3 text-sm">
+                <p className="mb-1 font-medium">Error</p>
+                <p>{aiError}</p>
+              </div>
+            )}
+
+            {aiLoading && (
+              <div className="bg-primary/10 text-primary rounded-lg p-3 text-sm">
+                <p className="mb-1 flex items-center gap-2 font-medium">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating form...
+                </p>
+                <p className="text-muted-foreground">
+                  This may take a few seconds. Please wait while the AI
+                  processes your request.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!aiLoading) {
+                  setAiDialogOpen(false);
+                  setAiPrompt("");
+                  setAiError(null);
+                }
+              }}
+              disabled={aiLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAIGenerate}
+              disabled={aiLoading || !aiPrompt.trim()}
+            >
+              {aiLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Generate Form
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

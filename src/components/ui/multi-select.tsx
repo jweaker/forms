@@ -1,13 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { X, ChevronDown } from "lucide-react";
+import { X, ChevronDown, Check } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
-import { Checkbox } from "~/components/ui/checkbox";
-import { Label } from "~/components/ui/label";
 import { Input } from "~/components/ui/input";
+import { toast } from "sonner";
 
 export interface MultiSelectOption {
   label: string;
@@ -43,6 +41,7 @@ export function MultiSelect({
         !containerRef.current.contains(event.target as Node)
       ) {
         setOpen(false);
+        setSearch(""); // Clear search when closing
       }
     };
 
@@ -55,7 +54,8 @@ export function MultiSelect({
       onChange(selected.filter((item) => item !== value));
     } else {
       if (maxSelections && selected.length >= maxSelections) {
-        return; // Don't select if limit reached
+        toast.error(`Maximum ${maxSelections} selections allowed`);
+        return;
       }
       onChange([...selected, value]);
     }
@@ -72,56 +72,81 @@ export function MultiSelect({
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>
-      <Button
-        type="button"
-        variant="outline"
+      <div
         role="combobox"
         aria-expanded={open}
+        aria-controls="multi-select-listbox"
         onClick={() => setOpen(!open)}
         className={cn(
-          "w-full justify-between",
-          selected.length > 0 ? "h-auto min-h-10" : "h-10",
+          "border-input hover:border-primary/50 flex min-h-11 w-full cursor-pointer items-center justify-between rounded-md border bg-transparent px-3 py-2 text-sm transition-colors",
+          selected.length > 0 && "min-h-11",
+          open && "ring-primary/20 ring-2",
         )}
       >
-        <div className="flex flex-1 flex-wrap gap-1">
+        <div className="flex flex-1 flex-wrap gap-1.5">
           {selected.length === 0 ? (
-            <span className="text-muted-foreground">{placeholder}</span>
+            <span className="text-muted-foreground text-sm">{placeholder}</span>
           ) : (
             selected.map((value) => {
               const option = options.find((opt) => opt.value === value);
               return (
-                <Badge key={value} variant="secondary" className="mr-1">
+                <Badge
+                  key={value}
+                  variant="secondary"
+                  className="bg-primary/10 text-primary hover:bg-primary/20 gap-1 rounded-md px-2 py-0.5 text-xs font-medium"
+                >
                   {option?.label ?? value}
-                  <button
-                    className="ring-offset-background focus:ring-ring ml-1 rounded-full outline-none focus:ring-2 focus:ring-offset-2"
+                  <span
+                    className="ring-offset-background focus:ring-ring hover:bg-primary/20 ml-0.5 inline-flex cursor-pointer rounded-full transition-colors outline-none focus:ring-2 focus:ring-offset-2"
                     onClick={(e) => handleRemove(value, e)}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleRemove(value, e as unknown as React.MouseEvent);
+                      }
+                    }}
+                    aria-label={`Remove ${option?.label ?? value}`}
                   >
-                    <X className="text-muted-foreground hover:text-foreground h-3 w-3" />
-                  </button>
+                    <X className="h-3 w-3" />
+                  </span>
                 </Badge>
               );
             })
           )}
         </div>
-        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-      </Button>
+        <ChevronDown
+          className={cn(
+            "ml-2 h-4 w-4 shrink-0 opacity-50 transition-transform duration-200",
+            open && "rotate-180",
+          )}
+        />
+      </div>
 
       {open && (
-        <div className="bg-popover text-popover-foreground absolute z-50 mt-1 w-full rounded-md border p-2 shadow-md">
-          <Input
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="mb-2 h-8"
-          />
-          <div className="max-h-60 overflow-auto">
+        <div
+          id="multi-select-listbox"
+          role="listbox"
+          className="bg-popover text-popover-foreground animate-in fade-in-0 zoom-in-95 absolute z-50 mt-2 w-full rounded-lg border shadow-lg"
+        >
+          <div className="p-3">
+            <Input
+              placeholder="Search options..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 text-sm"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-64 overflow-auto px-2 pb-2">
             {filteredOptions.length === 0 ? (
-              <p className="text-muted-foreground py-6 text-center text-sm">
-                No options found
-              </p>
+              <div className="text-muted-foreground py-8 text-center">
+                <p className="text-sm font-medium">No options found</p>
+                <p className="text-xs">Try a different search term</p>
+              </div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {filteredOptions.map((option) => {
                   const isSelected = selected.includes(option.value);
                   const isDisabled =
@@ -130,35 +155,45 @@ export function MultiSelect({
                     selected.length >= maxSelections;
 
                   return (
-                    <div
+                    <button
                       key={option.value}
+                      type="button"
                       className={cn(
-                        "hover:bg-accent flex cursor-pointer items-center space-x-2 rounded-sm px-2 py-1.5",
+                        "hover:bg-accent w-full rounded-md px-3 py-2.5 text-left text-sm transition-colors",
+                        "flex items-center justify-between gap-2",
+                        isSelected && "bg-accent",
                         isDisabled && "cursor-not-allowed opacity-50",
                       )}
                       onClick={() => !isDisabled && handleSelect(option.value)}
+                      disabled={isDisabled}
                     >
-                      <Checkbox
-                        id={`multi-select-${option.value}`}
-                        checked={isSelected}
-                        disabled={isDisabled}
-                        className="pointer-events-none"
-                      />
-                      <Label
-                        htmlFor={`multi-select-${option.value}`}
-                        className="flex-1 cursor-pointer text-sm font-normal"
-                      >
-                        {option.label}
-                      </Label>
-                    </div>
+                      <span className="flex-1 font-medium">{option.label}</span>
+                      {isSelected && (
+                        <Check className="text-primary h-4 w-4 flex-shrink-0" />
+                      )}
+                    </button>
                   );
                 })}
               </div>
             )}
           </div>
           {maxSelections && (
-            <div className="text-muted-foreground mt-2 border-t pt-2 text-xs">
-              {selected.length} / {maxSelections} selected
+            <div className="bg-muted/30 border-t px-3 py-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground font-medium">
+                  Selected
+                </span>
+                <span
+                  className={cn(
+                    "font-semibold",
+                    selected.length >= maxSelections
+                      ? "text-destructive"
+                      : "text-primary",
+                  )}
+                >
+                  {selected.length} / {maxSelections}
+                </span>
+              </div>
             </div>
           )}
         </div>

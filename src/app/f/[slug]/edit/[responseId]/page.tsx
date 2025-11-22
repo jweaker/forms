@@ -22,8 +22,7 @@ import { Alert, AlertDescription } from "~/components/ui/alert";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AlertCircle, Star, Github } from "lucide-react";
-import { authClient } from "~/server/better-auth/client";
+import { AlertCircle, Star, ArrowLeft } from "lucide-react";
 import { MultiSelect } from "~/components/ui/multi-select";
 
 type FormField = {
@@ -41,28 +40,27 @@ type FormField = {
   minValue: number | null;
   maxValue: number | null;
   defaultValue: string | null;
-  options: string | null; // JSON string
+  options: string | null;
 };
 
-export default function PublicFormPage() {
+export default function EditSubmissionPage() {
   const params = useParams();
   const router = useRouter();
-  const slug = params.slug as string;
-
-  // Get session using better-auth
-  const { data: session } = authClient.useSession();
+  const responseId = parseInt(params.responseId as string);
 
   const {
-    data: form,
+    data: response,
     isLoading,
     error,
-  } = api.public.getFormBySlug.useQuery({ slug });
-  const submitMutation = api.formResponses.submit.useMutation({
+  } = api.formResponses.getForEdit.useQuery({ responseId });
+
+  const updateMutation = api.formResponses.update.useMutation({
     onSuccess: () => {
-      router.push(`/f/${slug}/success`);
+      toast.success("Response updated successfully");
+      router.push("/dashboard?tab=submissions");
     },
     onError: (error) => {
-      toast.error(`Failed to submit form: ${error.message}`);
+      toast.error(`Failed to update response: ${error.message}`);
       setSubmitError(error.message);
     },
   });
@@ -76,61 +74,51 @@ export default function PublicFormPage() {
   const [comment, setComment] = useState<string>("");
   const [hoveredStar, setHoveredStar] = useState<number>(0);
 
-  // Initialize form data with default values
+  // Initialize form data with existing response values
   useEffect(() => {
-    if (form && Object.keys(formData).length === 0) {
+    if (response && Object.keys(formData).length === 0) {
       const initialData: Record<number, string | boolean | string[]> = {};
-      form.fields.forEach((field) => {
-        let options: Array<{ label: string; isDefault?: boolean }> = [];
-        if (field.options) {
-          try {
-            options = JSON.parse(field.options) as Array<{
-              label: string;
-              isDefault?: boolean;
-            }>;
-          } catch {
-            options = [];
-          }
-        }
 
-        // Set default values
-        if (field.defaultValue) {
-          if (field.type === "checkbox") {
-            initialData[field.id] = field.defaultValue === "true";
+      // Populate with existing response field values
+      response.responseFields.forEach((responseField) => {
+        const fieldId = responseField.formFieldId;
+        const field = response.form.fields.find((f) => f.id === fieldId);
+
+        if (!field) return;
+
+        // Parse the value
+        try {
+          const parsed = JSON.parse(responseField.value) as string[] | string;
+          if (Array.isArray(parsed)) {
+            initialData[fieldId] = parsed;
+          } else if (field.type === "checkbox") {
+            initialData[fieldId] = responseField.value === "Yes";
           } else {
-            initialData[field.id] = field.defaultValue;
+            initialData[fieldId] = responseField.value;
           }
-        } else if (field.allowMultiple) {
-          // Initialize multi-select fields with default options
-          const defaultOptions = options
-            .filter((opt) => opt.isDefault)
-            .map((opt) => opt.label);
-          initialData[field.id] = defaultOptions;
-        } else if (field.type === "checkbox") {
-          initialData[field.id] = false;
-        } else if (field.type === "range") {
-          // Set default for range slider
-          const min = field.minValue ?? 0;
-          const max = field.maxValue ?? 10;
-          initialData[field.id] = Math.floor((min + max) / 2).toString();
-        } else if (options.length > 0) {
-          // For single-select fields, set first isDefault option
-          const defaultOption = options.find((opt) => opt.isDefault);
-          if (defaultOption) {
-            initialData[field.id] = defaultOption.label;
+        } catch {
+          // Not JSON
+          if (field.type === "checkbox") {
+            initialData[fieldId] = responseField.value === "Yes";
+          } else {
+            initialData[fieldId] = responseField.value;
           }
         }
       });
+
+      // Set rating and comments
+      setRating(response.rating ?? 0);
+      setComment(response.comments ?? "");
+
       setFormData(initialData);
     }
-  }, [form, formData]);
+  }, [response, formData]);
 
   const handleFieldChange = (
     fieldId: number,
     value: string | boolean | string[],
   ) => {
     setFormData({ ...formData, [fieldId]: value });
-    // Clear field error when user starts typing
     if (fieldErrors[fieldId]) {
       const newErrors = { ...fieldErrors };
       delete newErrors[fieldId];
@@ -142,7 +130,6 @@ export default function PublicFormPage() {
     field: FormField,
     value: string | boolean | string[] | undefined,
   ): string | null => {
-    // Check required
     if (field.required) {
       if (typeof value === "boolean") {
         if (!value && field.type === "checkbox") {
@@ -157,18 +144,15 @@ export default function PublicFormPage() {
       }
     }
 
-    // Check selection limit for multi-select
     if (Array.isArray(value) && field.selectionLimit) {
       if (value.length > field.selectionLimit) {
         return `You can select at most ${field.selectionLimit} option(s)`;
       }
     }
 
-    // Skip validation for boolean or array values
     if (typeof value === "boolean" || Array.isArray(value)) return null;
     if (!value) return null;
 
-    // Check regex pattern
     if (field.regexPattern) {
       try {
         const regex = new RegExp(field.regexPattern);
@@ -180,7 +164,6 @@ export default function PublicFormPage() {
       }
     }
 
-    // Check min/max for number and range fields
     if ((field.type === "number" || field.type === "range") && value) {
       const numValue = parseFloat(value);
       if (!isNaN(numValue)) {
@@ -200,16 +183,11 @@ export default function PublicFormPage() {
     e.preventDefault();
     setSubmitError(null);
 
-    // Check if form requires authentication
-    if (!form?.allowAnonymous && !session) {
-      setSubmitError("Please sign in to submit this form");
-      toast.error("Authentication required");
-      return;
-    }
+    if (!response) return;
 
     // Validate all fields
     const errors: Record<string, string> = {};
-    form?.fields.forEach((field) => {
+    response.form.fields.forEach((field) => {
       const value =
         formData[field.id] ??
         (field.type === "checkbox" ? false : field.allowMultiple ? [] : "");
@@ -229,13 +207,11 @@ export default function PublicFormPage() {
     const fields: { fieldId: number; value: string | string[] }[] = [];
     Object.entries(formData).forEach(([fieldId, value]) => {
       if (Array.isArray(value)) {
-        // Multi-select: send as array
         fields.push({
           fieldId: parseInt(fieldId),
           value: value,
         });
       } else {
-        // Single value
         fields.push({
           fieldId: parseInt(fieldId),
           value: typeof value === "boolean" ? (value ? "Yes" : "No") : value,
@@ -243,26 +219,12 @@ export default function PublicFormPage() {
       }
     });
 
-    if (form) {
-      submitMutation.mutate({
-        formId: form.id,
-        fields,
-        rating: rating > 0 ? rating : undefined,
-        comments: comment || undefined,
-      });
-    }
-  };
-
-  const handleSignIn = async () => {
-    try {
-      await authClient.signIn.social({
-        provider: "github",
-        callbackURL: `/f/${slug}`,
-      });
-    } catch (error) {
-      toast.error("Failed to sign in");
-      console.error(error);
-    }
+    updateMutation.mutate({
+      responseId,
+      fields,
+      rating: rating > 0 ? rating : undefined,
+      comments: comment || undefined,
+    });
   };
 
   if (isLoading) {
@@ -286,37 +248,33 @@ export default function PublicFormPage() {
     );
   }
 
-  if (error || !form) {
+  if (error || !response) {
     return (
       <div className="container mx-auto max-w-2xl py-8">
         <Card>
           <CardContent className="py-16 text-center">
             <AlertCircle className="text-muted-foreground mx-auto h-12 w-12" />
-            <h2 className="mt-4 text-2xl font-semibold">Form not found</h2>
+            <h2 className="mt-4 text-2xl font-semibold">
+              Cannot edit response
+            </h2>
             <p className="text-muted-foreground mt-2">
-              The form you are looking for does not exist or has been removed.
+              {error?.message ??
+                "The response you are trying to edit does not exist or you do not have permission to edit it."}
             </p>
+            <Button
+              className="mt-4"
+              onClick={() => router.push("/dashboard?tab=submissions")}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Submissions
+            </Button>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  if (form.status !== "published") {
-    return (
-      <div className="container mx-auto max-w-2xl py-8">
-        <Card>
-          <CardContent className="py-16 text-center">
-            <AlertCircle className="text-muted-foreground mx-auto h-12 w-12" />
-            <h2 className="mt-4 text-2xl font-semibold">Form not available</h2>
-            <p className="text-muted-foreground mt-2">
-              This form is not currently accepting responses.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const form = response.form;
 
   return (
     <div className="bg-background min-h-screen px-4 py-8 sm:px-6 lg:px-8">
@@ -326,7 +284,7 @@ export default function PublicFormPage() {
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <CardTitle className="text-2xl sm:text-3xl">
-                  {form.name}
+                  Edit Submission: {form.name}
                 </CardTitle>
                 {form.description && (
                   <p className="text-muted-foreground mt-2 text-sm sm:text-base">
@@ -334,67 +292,28 @@ export default function PublicFormPage() {
                   </p>
                 )}
               </div>
-              {/* Show login/user info in top right */}
-              {session ? (
-                <div className="bg-muted flex items-center gap-2 rounded-md px-2 py-1.5 text-xs">
-                  <div className="bg-primary text-primary-foreground flex h-6 w-6 items-center justify-center rounded-full font-medium">
-                    {session.user.name?.[0]?.toUpperCase() ?? "U"}
-                  </div>
-                  <span className="hidden sm:inline">{session.user.name}</span>
-                </div>
-              ) : (
-                <Button size="sm" variant="ghost" onClick={handleSignIn}>
-                  <Github className="mr-1.5 h-4 w-4" />
-                  <span className="hidden sm:inline">Sign in</span>
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => router.push("/dashboard?tab=submissions")}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
             </div>
-            {form.fields.length > 0 && (
-              <div className="text-muted-foreground flex items-center gap-2 text-xs">
-                <span>
-                  {form.fields.length}{" "}
-                  {form.fields.length === 1 ? "field" : "fields"}
-                </span>
-                <span>•</span>
-                <span>
-                  {form.fields.filter((f) => f.required).length} required
-                </span>
-                {!form.allowAnonymous && (
-                  <>
-                    <span>•</span>
-                    <span className="text-primary font-medium">
-                      Sign-in required
-                    </span>
-                  </>
-                )}
-              </div>
-            )}
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-sm">
+                You are editing a previous submission. Changes will be saved to
+                the history.
+              </AlertDescription>
+            </Alert>
           </CardHeader>
           <CardContent>
             {submitError && (
               <Alert variant="destructive" className="mb-4">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{submitError}</AlertDescription>
-              </Alert>
-            )}
-
-            {/* Authentication Required Alert - Only show if not signed in and auth is required */}
-            {!form.allowAnonymous && !session && (
-              <Alert className="border-primary/50 bg-primary/5 mb-4">
-                <AlertCircle className="text-primary h-4 w-4" />
-                <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm">
-                    Please sign in to submit this form
-                  </span>
-                  <Button
-                    size="sm"
-                    onClick={handleSignIn}
-                    className="w-full sm:w-auto"
-                  >
-                    <Github className="mr-2 h-4 w-4" />
-                    Sign in with GitHub
-                  </Button>
-                </AlertDescription>
               </Alert>
             )}
 
@@ -491,11 +410,9 @@ export default function PublicFormPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={
-                  submitMutation.isPending || (!form.allowAnonymous && !session)
-                }
+                disabled={updateMutation.isPending}
               >
-                {submitMutation.isPending ? "Submitting..." : "Submit"}
+                {updateMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </form>
           </CardContent>
@@ -514,7 +431,6 @@ function renderFormField(
   const booleanValue = typeof value === "boolean" ? value : false;
   const arrayValue = Array.isArray(value) ? value : [];
 
-  // Parse options from JSON
   let options: Array<{ label: string; isDefault?: boolean }> = [];
   if (field.options) {
     try {
@@ -541,7 +457,6 @@ function renderFormField(
 
     case "select":
       if (field.allowMultiple) {
-        // Multi-select dropdown with combobox
         return (
           <MultiSelect
             options={options.map((opt) => ({
@@ -556,7 +471,6 @@ function renderFormField(
         );
       }
 
-      // Single select dropdown
       return (
         <Select value={stringValue} onValueChange={onChange}>
           <SelectTrigger id={`field-${field.id}`}>
@@ -604,7 +518,6 @@ function renderFormField(
                 checked={arrayValue.includes(opt.label)}
                 onCheckedChange={(checked) => {
                   if (checked) {
-                    // Check selection limit
                     if (
                       field.selectionLimit &&
                       arrayValue.length >= field.selectionLimit

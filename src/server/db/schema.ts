@@ -15,6 +15,10 @@ export const forms = sqliteTable(
       .integer({ mode: "boolean" })
       .default(true)
       .notNull(),
+    allowEditing: d
+      .integer({ mode: "boolean" })
+      .default(sql`0`)
+      .notNull(),
     createdById: d
       .text({ length: 255 })
       .notNull()
@@ -122,6 +126,31 @@ export const formResponseFields = sqliteTable(
     updatedAt: d.integer({ mode: "timestamp" }).$onUpdate(() => new Date()),
   }),
   (t) => [index("form_response_fields_response_id_idx").on(t.formResponseId)],
+);
+
+// Form response history - stores snapshots when a response is edited
+export const formResponseHistory = sqliteTable(
+  "form_response_history",
+  (d) => ({
+    id: d.integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
+    formResponseId: d
+      .integer({ mode: "number" })
+      .notNull()
+      .references(() => formResponses.id, { onDelete: "cascade" }),
+    // Snapshot of the response data as JSON
+    data: d.text().notNull(), // JSON string of {fields: [{fieldId, value}], rating?, comments?}
+    editedById: d
+      .text({ length: 255 })
+      .references(() => user.id, { onDelete: "set null" }),
+    createdAt: d
+      .integer({ mode: "timestamp" })
+      .default(sql`(unixepoch())`)
+      .notNull(),
+  }),
+  (t) => [
+    index("form_response_history_response_id_idx").on(t.formResponseId),
+    index("form_response_history_created_at_idx").on(t.createdAt),
+  ],
 );
 
 // Better Auth core tables
@@ -234,6 +263,7 @@ export const formResponsesRelations = relations(
       references: [user.id],
     }),
     responseFields: many(formResponseFields),
+    history: many(formResponseHistory),
   }),
 );
 
@@ -247,6 +277,20 @@ export const formResponseFieldsRelations = relations(
     formField: one(formFields, {
       fields: [formResponseFields.formFieldId],
       references: [formFields.id],
+    }),
+  }),
+);
+
+export const formResponseHistoryRelations = relations(
+  formResponseHistory,
+  ({ one }) => ({
+    formResponse: one(formResponses, {
+      fields: [formResponseHistory.formResponseId],
+      references: [formResponses.id],
+    }),
+    editedBy: one(user, {
+      fields: [formResponseHistory.editedById],
+      references: [user.id],
     }),
   }),
 );

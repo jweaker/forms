@@ -7,7 +7,12 @@ import {
   protectedProcedure,
   publicProcedure,
 } from "~/server/api/trpc";
-import { formResponseFields, formResponses, forms } from "~/server/db/schema";
+import {
+  formResponseFields,
+  formResponses,
+  forms,
+  formResponseHistory,
+} from "~/server/db/schema";
 
 export const formResponsesRouter = createTRPCRouter({
   /**
@@ -222,6 +227,182 @@ export const formResponsesRouter = createTRPCRouter({
         success: true,
         responseId: response!.id,
       };
+    }),
+
+  /**
+   * Update an existing response (if form allows editing and user owns response)
+   */
+  update: protectedProcedure
+    .input(
+      z.object({
+        responseId: z.number(),
+        fields: z.array(
+          z.object({
+            fieldId: z.number(),
+            value: z.union([z.string(), z.array(z.string())]),
+          }),
+        ),
+        rating: z.number().min(1).max(5).optional(),
+        comments: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Get the existing response
+      const existingResponse = await ctx.db.query.formResponses.findFirst({
+        where: eq(formResponses.id, input.responseId),
+        with: {
+          form: {
+            with: {
+              fields: true,
+            },
+          },
+          responseFields: {
+            with: {
+              formField: true,
+            },
+          },
+        },
+      });
+
+      if (!existingResponse) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Response not found",
+        });
+      }
+
+      // Check if user owns this response
+      if (existingResponse.createdById !== ctx.session.user.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You do not have permission to edit this response",
+        });
+      }
+
+      // Check if form allows editing
+      if (!existingResponse.form.allowEditing) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This form does not allow editing submissions",
+        });
+      }
+
+      // Validate fields (similar to submit)
+      const form = existingResponse.form;
+      const requiredFieldIds = form.fields
+        .filter((f) => f.required)
+        .map((f) => f.id);
+
+      const submittedFieldIds = input.fields.map((f) => f.fieldId);
+      const missingRequiredFields = requiredFieldIds.filter(
+        (id) => !submittedFieldIds.includes(id),
+      );
+
+      if (missingRequiredFields.length > 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Missing required fields",
+        });
+      }
+
+      // Save current state to history before updating
+      const historyData = {
+        fields: existingResponse.responseFields.map((rf) => ({
+          fieldId: rf.formFieldId,
+          fieldLabel: rf.formField.label,
+          value: rf.value,
+        })),
+        rating: existingResponse.rating,
+        comments: existingResponse.comments,
+      };
+
+      await ctx.db.insert(formResponseHistory).values({
+        formResponseId: input.responseId,
+        data: JSON.stringify(historyData),
+        editedById: ctx.session.user.id,
+      });
+
+      // Update the response metadata
+      await ctx.db
+        .update(formResponses)
+        .set({
+          rating: input.rating,
+          comments: input.comments,
+          updatedAt: new Date(),
+        })
+        .where(eq(formResponses.id, input.responseId));
+
+      // Delete old field values and insert new ones
+      await ctx.db
+        .delete(formResponseFields)
+        .where(eq(formResponseFields.formResponseId, input.responseId));
+
+      if (input.fields.length > 0) {
+        await ctx.db.insert(formResponseFields).values(
+          input.fields.map((field) => ({
+            formResponseId: input.responseId,
+            formFieldId: field.fieldId,
+            value: Array.isArray(field.value)
+              ? JSON.stringify(field.value)
+              : field.value,
+          })),
+        );
+      }
+
+      return {
+        success: true,
+        responseId: input.responseId,
+      };
+    }),
+
+  /**
+   * Get a response for editing (user must own the response)
+   */
+  getForEdit: protectedProcedure
+    .input(z.object({ responseId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const response = await ctx.db.query.formResponses.findFirst({
+        where: eq(formResponses.id, input.responseId),
+        with: {
+          form: {
+            with: {
+              fields: {
+                orderBy: (fields, { asc }) => [asc(fields.order)],
+              },
+            },
+          },
+          responseFields: {
+            with: {
+              formField: true,
+            },
+          },
+        },
+      });
+
+      if (!response) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Response not found",
+        });
+      }
+
+      // Check if user owns this response
+      if (response.createdById !== ctx.session.user.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You do not have permission to edit this response",
+        });
+      }
+
+      // Check if form allows editing
+      if (!response.form.allowEditing) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This form does not allow editing submissions",
+        });
+      }
+
+      return response;
     }),
 
   /**
@@ -514,5 +695,101 @@ export const formResponsesRouter = createTRPCRouter({
           (totalResult[0]?.count ?? 0) - (anonymousResult[0]?.count ?? 0),
         averageRating: avgRatingResult[0]?.avg ?? null,
       };
+    }),
+
+  /**
+   * Get current user's own submissions
+   */
+  mySubmissions: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).default(20),
+        offset: z.number().min(0).default(0),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      // Get responses created by the current user
+      const responses = await ctx.db.query.formResponses.findMany({
+        where: eq(formResponses.createdById, ctx.session.user.id),
+        orderBy: [desc(formResponses.createdAt)],
+        limit: input.limit,
+        offset: input.offset,
+        with: {
+          form: {
+            columns: {
+              id: true,
+              name: true,
+              slug: true,
+              allowEditing: true,
+            },
+          },
+          responseFields: {
+            with: {
+              formField: true,
+            },
+          },
+        },
+      });
+
+      // Get total count
+      const countResult = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(formResponses)
+        .where(eq(formResponses.createdById, ctx.session.user.id));
+
+      const total = countResult[0]?.count ?? 0;
+
+      return {
+        items: responses,
+        total,
+        hasMore: input.offset + input.limit < total,
+      };
+    }),
+
+  /**
+   * Get edit history for a response (owner only)
+   */
+  getHistory: protectedProcedure
+    .input(z.object({ responseId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      // Get the response to verify ownership
+      const response = await ctx.db.query.formResponses.findFirst({
+        where: eq(formResponses.id, input.responseId),
+        with: {
+          form: true,
+        },
+      });
+
+      if (!response) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Response not found",
+        });
+      }
+
+      // Verify form ownership
+      if (response.form.createdById !== ctx.session.user.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You do not have permission to view this response history",
+        });
+      }
+
+      // Get history records
+      const history = await ctx.db.query.formResponseHistory.findMany({
+        where: eq(formResponseHistory.formResponseId, input.responseId),
+        orderBy: [desc(formResponseHistory.createdAt)],
+        with: {
+          editedBy: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      return history;
     }),
 });

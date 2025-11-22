@@ -37,21 +37,33 @@ import { formatDate, formatRelativeTime } from "~/lib/utils";
 export default function ResponsesPage() {
   const params = useParams();
   const router = useRouter();
-  const formId = parseInt(params.id as string);
+  const slug = params.slug as string;
 
-  const { data: form, isLoading: formLoading } = api.forms.getById.useQuery({
-    id: formId,
-  });
+  const { data: form, isLoading: formLoading } = api.forms.getBySlug.useQuery(
+    {
+      slug,
+    },
+    {
+      enabled: !!slug,
+    },
+  );
   const { data: responsesData, isLoading: responsesLoading } =
-    api.formResponses.list.useQuery({
-      formId,
-      limit: 100,
-    });
+    api.formResponses.list.useQuery(
+      {
+        formId: form?.id ?? 0,
+        limit: 100,
+      },
+      {
+        enabled: !!form?.id,
+      },
+    );
 
   const deleteResponseMutation = api.formResponses.delete.useMutation({
     onSuccess: () => {
       toast.success("Response deleted successfully");
-      void utils.formResponses.list.invalidate({ formId });
+      if (form?.id) {
+        void utils.formResponses.list.invalidate({ formId: form.id });
+      }
     },
     onError: (error) => {
       toast.error(`Failed to delete response: ${error.message}`);
@@ -67,9 +79,10 @@ export default function ResponsesPage() {
   };
 
   const handleExportCSV = async () => {
+    if (!form?.id) return;
     try {
       const { data, headers } = await utils.client.formResponses.export.query({
-        formId,
+        formId: form.id,
       });
 
       // Convert data to CSV format
@@ -100,7 +113,7 @@ export default function ResponsesPage() {
       const a = document.createElement("a");
       a.href = url;
       const timestamp = new Date().toISOString().split("T")[0];
-      a.download = `form-responses-${formId}-${timestamp}.csv`;
+      a.download = `form-responses-${slug}-${timestamp}.csv`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -163,7 +176,7 @@ export default function ResponsesPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => router.push(`/forms/${formId}/edit`)}
+            onClick={() => router.push(`/forms/${slug}/edit`)}
           >
             Edit Form
           </Button>
@@ -253,7 +266,9 @@ export default function ResponsesPage() {
                       // Parse value - could be JSON array or string
                       let displayValue: string;
                       try {
-                        const parsed = JSON.parse(responseField.value);
+                        const parsed = JSON.parse(responseField.value) as
+                          | string[]
+                          | string;
                         if (Array.isArray(parsed)) {
                           // Multi-select: join array values
                           displayValue = parsed.join(", ");
@@ -282,11 +297,18 @@ export default function ResponsesPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <User className="text-muted-foreground h-4 w-4" />
-                            <span className="text-sm">
-                              {response.createdBy?.name ??
-                                response.submitterEmail ??
-                                "Anonymous"}
-                            </span>
+                            <div className="flex flex-col">
+                              <span className="text-sm">
+                                {response.createdBy?.name ??
+                                  response.submitterEmail ??
+                                  "Anonymous"}
+                              </span>
+                              {response.createdBy?.email && (
+                                <span className="text-muted-foreground text-xs">
+                                  {response.createdBy.email}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -335,7 +357,7 @@ export default function ResponsesPage() {
                               <DropdownMenuItem
                                 onClick={() =>
                                   router.push(
-                                    `/forms/${formId}/responses/${response.id}`,
+                                    `/forms/${slug}/responses/${response.id}`,
                                   )
                                 }
                               >

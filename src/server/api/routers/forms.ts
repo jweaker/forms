@@ -159,6 +159,7 @@ export const formsRouter = createTRPCRouter({
         description: z.string().optional(),
         isPublic: z.boolean().default(false),
         allowAnonymous: z.boolean().default(true),
+        allowEditing: z.boolean().default(false),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -186,6 +187,7 @@ export const formsRouter = createTRPCRouter({
           description: input.description,
           isPublic: input.isPublic,
           allowAnonymous: input.allowAnonymous,
+          allowEditing: input.allowEditing,
           status: "draft",
           createdById: ctx.session.user.id,
         })
@@ -202,10 +204,12 @@ export const formsRouter = createTRPCRouter({
       z.object({
         id: z.number(),
         name: z.string().min(1).max(256).optional(),
+        slug: z.string().min(1).max(256).optional(),
         description: z.string().optional(),
         isPublic: z.boolean().optional(),
         allowAnonymous: z.boolean().optional(),
         allowMultipleSubmissions: z.boolean().optional(),
+        allowEditing: z.boolean().optional(),
         status: z.enum(["draft", "published", "archived"]).optional(),
       }),
     )
@@ -225,16 +229,37 @@ export const formsRouter = createTRPCRouter({
         });
       }
 
-      // If name is changing, regenerate slug
+      // Handle slug changes
       let slug = existing.slug;
-      if (input.name && input.name !== existing.name) {
+      if (input.slug !== undefined && input.slug !== existing.slug) {
+        // User provided a custom slug
+        slug = generateSlug(input.slug);
+
+        // Check if slug is already taken by another form
+        const slugExists = await ctx.db.query.forms.findFirst({
+          where: and(
+            eq(forms.slug, slug),
+            // Not the current form
+            sql`${forms.id} != ${input.id}`,
+          ),
+        });
+
+        if (slugExists) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "This slug is already taken. Please choose a different one.",
+          });
+        }
+      } else if (input.name && input.name !== existing.name && !input.slug) {
+        // Auto-generate slug from name if name changed but no custom slug provided
         slug = generateSlug(input.name);
         let counter = 1;
 
         // Check if new slug exists
         while (true) {
           const slugExists = await ctx.db.query.forms.findFirst({
-            where: and(eq(forms.slug, slug), eq(forms.id, input.id)),
+            where: and(eq(forms.slug, slug), sql`${forms.id} != ${input.id}`),
           });
 
           if (!slugExists) break;
@@ -248,11 +273,12 @@ export const formsRouter = createTRPCRouter({
         .update(forms)
         .set({
           name: input.name,
-          slug: input.name ? slug : undefined,
+          slug: slug !== existing.slug ? slug : undefined,
           description: input.description,
           isPublic: input.isPublic,
           allowAnonymous: input.allowAnonymous,
           allowMultipleSubmissions: input.allowMultipleSubmissions,
+          allowEditing: input.allowEditing,
           status: input.status,
         })
         .where(eq(forms.id, input.id))
@@ -337,6 +363,7 @@ export const formsRouter = createTRPCRouter({
           description: original.description,
           isPublic: original.isPublic,
           allowAnonymous: original.allowAnonymous,
+          allowEditing: original.allowEditing,
           status: "draft", // Always start as draft
           createdById: ctx.session.user.id,
         })
