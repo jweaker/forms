@@ -9,6 +9,7 @@ console.log("Better Auth Config:", {
   hasSecret: !!env.BETTER_AUTH_SECRET,
   secretLength: env.BETTER_AUTH_SECRET?.length,
   githubClientId: env.BETTER_AUTH_GITHUB_CLIENT_ID,
+  googleClientId: env.BETTER_AUTH_GOOGLE_CLIENT_ID,
 });
 
 /**
@@ -51,6 +52,10 @@ export const auth =
       github: {
         clientId: env.BETTER_AUTH_GITHUB_CLIENT_ID,
         clientSecret: env.BETTER_AUTH_GITHUB_CLIENT_SECRET,
+      },
+      google: {
+        clientId: env.BETTER_AUTH_GOOGLE_CLIENT_ID,
+        clientSecret: env.BETTER_AUTH_GOOGLE_CLIENT_SECRET,
       },
     },
   });
