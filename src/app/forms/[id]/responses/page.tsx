@@ -247,24 +247,24 @@ export default function ResponsesPage() {
                 </TableHeader>
                 <TableBody>
                   {responses.map((response) => {
-                    // Group multi-select field values
+                    // Create map of field ID to display value
                     const fieldValues = new Map<number, string>();
                     for (const responseField of response.responseFields) {
-                      const existing = fieldValues.get(
-                        responseField.formFieldId,
-                      );
-                      if (existing) {
-                        // Multi-select: combine values
-                        fieldValues.set(
-                          responseField.formFieldId,
-                          `${existing}, ${responseField.value}`,
-                        );
-                      } else {
-                        fieldValues.set(
-                          responseField.formFieldId,
-                          responseField.value,
-                        );
+                      // Parse value - could be JSON array or string
+                      let displayValue: string;
+                      try {
+                        const parsed = JSON.parse(responseField.value);
+                        if (Array.isArray(parsed)) {
+                          // Multi-select: join array values
+                          displayValue = parsed.join(", ");
+                        } else {
+                          displayValue = responseField.value;
+                        }
+                      } catch {
+                        // Not JSON, use as-is
+                        displayValue = responseField.value;
                       }
+                      fieldValues.set(responseField.formFieldId, displayValue);
                     }
 
                     return (

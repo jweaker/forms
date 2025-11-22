@@ -59,6 +59,7 @@ import {
   fieldTypeSupportsMultiSelect,
   fieldTypeSupportsMinMax,
   fieldTypeSupportsDefaultValue,
+  fieldTypeSupportsPlaceholder,
 } from "~/lib/field-types";
 import {
   DndContext,
@@ -97,15 +98,7 @@ type FormField = {
   minValue: number | null;
   maxValue: number | null;
   defaultValue: string | null;
-  options: {
-    id: number;
-    formFieldId: number;
-    optionLabel: string;
-    isDefault: boolean;
-    order: number;
-    createdAt: Date;
-    updatedAt: Date | null;
-  }[];
+  options: string | null; // JSON string
 };
 
 type FieldDialogMode = "create" | "edit";
@@ -285,14 +278,27 @@ export default function FormBuilderPage() {
     setFieldHelpText(field.helpText ?? "");
     setFieldRegexPattern(field.regexPattern ?? "");
     setFieldValidationMessage(field.validationMessage ?? "");
-    setFieldOptions(
-      field.options.length > 0
-        ? field.options.map((opt) => ({
-            label: opt.optionLabel,
-            isDefault: opt.isDefault,
-          }))
-        : [{ label: "", isDefault: false }],
-    );
+
+    // Parse JSON options
+    if (field.options) {
+      try {
+        const parsedOptions = JSON.parse(field.options) as Array<{
+          label: string;
+          isDefault?: boolean;
+        }>;
+        setFieldOptions(
+          parsedOptions.map((opt) => ({
+            label: opt.label,
+            isDefault: opt.isDefault ?? false,
+          })),
+        );
+      } catch {
+        setFieldOptions([{ label: "", isDefault: false }]);
+      }
+    } else {
+      setFieldOptions([{ label: "", isDefault: false }]);
+    }
+
     setSelectedTemplate("");
     setFieldAllowMultiple(field.allowMultiple ?? false);
     setFieldSelectionLimit(
@@ -329,6 +335,11 @@ export default function FormBuilderPage() {
     if (!fieldTypeSupportsMinMax(newType)) {
       setFieldMinValue("");
       setFieldMaxValue("");
+    }
+
+    // Clear placeholder when switching to fields that don't support it
+    if (!fieldTypeSupportsPlaceholder(newType)) {
+      setFieldPlaceholder("");
     }
 
     // Set default min/max for range slider
@@ -836,15 +847,17 @@ export default function FormBuilderPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="field-placeholder">Placeholder</Label>
-                <Input
-                  id="field-placeholder"
-                  value={fieldPlaceholder}
-                  onChange={(e) => setFieldPlaceholder(e.target.value)}
-                  placeholder="e.g., Enter your name"
-                />
-              </div>
+              {fieldTypeSupportsPlaceholder(fieldType) && (
+                <div className="space-y-2">
+                  <Label htmlFor="field-placeholder">Placeholder</Label>
+                  <Input
+                    id="field-placeholder"
+                    value={fieldPlaceholder}
+                    onChange={(e) => setFieldPlaceholder(e.target.value)}
+                    placeholder="e.g., Enter your name"
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="field-help">Help Text</Label>
                 <Input
@@ -884,10 +897,22 @@ export default function FormBuilderPage() {
                             checked={option.isDefault}
                             onCheckedChange={(checked) => {
                               const newOptions = [...fieldOptions];
-                              newOptions[index] = {
-                                ...newOptions[index]!,
-                                isDefault: checked,
-                              };
+
+                              // If single-select (not allowMultiple), uncheck all others
+                              if (checked && !fieldAllowMultiple) {
+                                newOptions.forEach((opt, i) => {
+                                  newOptions[i] = {
+                                    ...opt,
+                                    isDefault: i === index,
+                                  };
+                                });
+                              } else {
+                                newOptions[index] = {
+                                  ...newOptions[index]!,
+                                  isDefault: checked,
+                                };
+                              }
+
                               setFieldOptions(newOptions);
                             }}
                           />
@@ -1229,6 +1254,19 @@ function SortableFieldItem({
 }
 
 function renderPreviewField(field: FormField) {
+  // Parse options if they exist
+  let options: Array<{ label: string; isDefault?: boolean }> = [];
+  if (field.options) {
+    try {
+      options = JSON.parse(field.options) as Array<{
+        label: string;
+        isDefault?: boolean;
+      }>;
+    } catch {
+      options = [];
+    }
+  }
+
   switch (field.type) {
     case "textarea":
       return (
@@ -1248,9 +1286,9 @@ function renderPreviewField(field: FormField) {
             />
           </SelectTrigger>
           <SelectContent>
-            {field.options.map((opt) => (
-              <SelectItem key={opt.id} value={opt.optionLabel}>
-                {opt.optionLabel}
+            {options.map((opt, index) => (
+              <SelectItem key={index} value={opt.label}>
+                {opt.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -1259,10 +1297,21 @@ function renderPreviewField(field: FormField) {
     case "radio":
       return (
         <div className="space-y-2">
-          {field.options.map((opt) => (
-            <div key={opt.id} className="flex items-center space-x-2">
+          {options.map((opt, index) => (
+            <div key={index} className="flex items-center space-x-2">
               <input type="radio" disabled className="h-3.5 w-3.5" />
-              <Label className="text-sm">{opt.optionLabel}</Label>
+              <Label className="text-sm">{opt.label}</Label>
+            </div>
+          ))}
+        </div>
+      );
+    case "checkbox-group":
+      return (
+        <div className="space-y-2">
+          {options.map((opt, index) => (
+            <div key={index} className="flex items-center space-x-2">
+              <input type="checkbox" disabled className="h-3.5 w-3.5" />
+              <Label className="text-sm">{opt.label}</Label>
             </div>
           ))}
         </div>
@@ -1275,6 +1324,33 @@ function renderPreviewField(field: FormField) {
             {field.placeholder ?? "Check to confirm"}
           </Label>
         </div>
+      );
+    case "range":
+      return (
+        <div className="space-y-2">
+          <input
+            type="range"
+            disabled
+            min={field.minValue ?? 0}
+            max={field.maxValue ?? 10}
+            className="w-full"
+          />
+          <div className="text-muted-foreground flex justify-between text-xs">
+            <span>{field.minValue ?? 0}</span>
+            <span>{field.maxValue ?? 10}</span>
+          </div>
+        </div>
+      );
+    case "number":
+      return (
+        <Input
+          type="number"
+          placeholder={field.placeholder ?? ""}
+          disabled
+          min={field.minValue ?? undefined}
+          max={field.maxValue ?? undefined}
+          className="text-sm"
+        />
       );
     default:
       return (

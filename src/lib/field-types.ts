@@ -130,6 +130,17 @@ export const FIELD_TYPES_WITH_DEFAULT_VALUE = [
   FIELD_TYPES.CHECKBOX,
 ];
 
+// Field types that support placeholders
+export const FIELD_TYPES_WITH_PLACEHOLDER = [
+  FIELD_TYPES.TEXT,
+  FIELD_TYPES.TEXTAREA,
+  FIELD_TYPES.NUMBER,
+  FIELD_TYPES.DATE,
+  FIELD_TYPES.TIME,
+  FIELD_TYPES.DATETIME,
+  FIELD_TYPES.SELECT,
+];
+
 // Check if field type needs options
 export function fieldTypeNeedsOptions(type: string): boolean {
   return (FIELD_TYPES_WITH_OPTIONS as readonly string[]).includes(type);
@@ -153,6 +164,11 @@ export function fieldTypeSupportsMinMax(type: string): boolean {
 // Check if field type supports default value
 export function fieldTypeSupportsDefaultValue(type: string): boolean {
   return (FIELD_TYPES_WITH_DEFAULT_VALUE as readonly string[]).includes(type);
+}
+
+// Check if field type supports placeholder
+export function fieldTypeSupportsPlaceholder(type: string): boolean {
+  return (FIELD_TYPES_WITH_PLACEHOLDER as readonly string[]).includes(type);
 }
 
 // Get label for field type

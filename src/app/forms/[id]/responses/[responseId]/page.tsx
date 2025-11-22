@@ -101,10 +101,10 @@ export default function ResponseDetailPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-4xl py-8">
+    <div className="container mx-auto max-w-6xl py-8">
       {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="icon"
@@ -113,193 +113,138 @@ export default function ResponseDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">Response Details</h1>
-            <p className="text-muted-foreground">
-              {response.form.name} - Response #{response.id}
+            <h1 className="text-2xl font-bold">{response.form.name}</h1>
+            <p className="text-muted-foreground text-sm">
+              Submitted {formatRelativeTime(response.createdAt)} by{" "}
+              {response.createdBy?.name ?? response.submitterEmail ?? "Anonymous"}
             </p>
           </div>
         </div>
-        <Button variant="destructive" size="sm" onClick={handleDelete}>
-          <Trash className="mr-2 h-4 w-4" />
-          Delete
+        <Button variant="ghost" size="icon" onClick={handleDelete}>
+          <Trash className="h-4 w-4" />
         </Button>
       </div>
 
-      <div className="space-y-6">
-        {/* Metadata Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Submission Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1">
-                <p className="text-muted-foreground text-sm">Submitted By</p>
-                <p className="font-medium">
-                  {response.createdBy?.name ?? "Anonymous"}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-muted-foreground text-sm">Email</p>
-                <p className="flex items-center gap-2 font-medium">
-                  <Mail className="h-4 w-4" />
-                  {response.createdBy?.email ??
-                    response.submitterEmail ??
-                    "N/A"}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-muted-foreground text-sm">Submitted At</p>
-                <p className="flex items-center gap-2 font-medium">
-                  <Calendar className="h-4 w-4" />
-                  {formatDate(response.createdAt)}
-                  <span className="text-muted-foreground text-xs">
-                    ({formatRelativeTime(response.createdAt)})
+      {/* Rating and Comments Section */}
+      {(response.rating || response.comments) && (
+        <Card className="mb-6">
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              {response.rating && (
+                <div className="flex items-center gap-3">
+                  <span className="text-muted-foreground text-sm font-medium">
+                    Rating:
                   </span>
-                </p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-muted-foreground text-sm">IP Address</p>
-                <p className="flex items-center gap-2 font-mono text-sm font-medium">
-                  <Network className="h-4 w-4" />
-                  {response.ipAddress ?? "Unknown"}
-                </p>
-              </div>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`h-5 w-5 ${
+                          star <= response.rating!
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "text-gray-300"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {response.comments && (
+                <div className="space-y-2">
+                  <p className="text-muted-foreground text-sm font-medium">
+                    Comments:
+                  </p>
+                  <p className="text-sm leading-relaxed">{response.comments}</p>
+                </div>
+              )}
             </div>
-
-            {response.rating && (
-              <div className="space-y-1">
-                <p className="text-muted-foreground text-sm">Rating</p>
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Star
-                      key={star}
-                      className={`h-5 w-5 ${
-                        star <= response.rating!
-                          ? "fill-yellow-400 text-yellow-400"
-                          : "text-gray-300"
-                      }`}
-                    />
-                  ))}
-                  <span className="text-muted-foreground ml-2 text-sm">
-                    {response.rating} / 5
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {response.comments && (
-              <div className="space-y-1">
-                <p className="text-muted-foreground text-sm">Comments</p>
-                <div className="bg-muted flex items-start gap-2 rounded-lg p-3">
-                  <MessageSquare className="text-muted-foreground mt-0.5 h-4 w-4" />
-                  <p className="text-sm">{response.comments}</p>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
+      )}
 
-        {/* Form Responses Card */}
+      {/* Form Responses Grid */}
+      {response.responseFields.length === 0 ? (
         <Card>
-          <CardHeader>
-            <CardTitle>Form Responses</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {response.responseFields.length === 0 ? (
-              <p className="text-muted-foreground py-8 text-center">
-                No field responses found
-              </p>
-            ) : (
-              <div className="space-y-6">
-                {(() => {
-                  // Group response fields by formFieldId for multi-select handling
-                  const groupedFields = new Map<
-                    number,
-                    {
-                      formField: (typeof response.responseFields)[0]["formField"];
-                      values: string[];
-                    }
-                  >();
-
-                  for (const field of response.responseFields) {
-                    const existing = groupedFields.get(field.formFieldId);
-                    if (existing) {
-                      existing.values.push(field.value);
-                    } else {
-                      groupedFields.set(field.formFieldId, {
-                        formField: field.formField,
-                        values: [field.value],
-                      });
-                    }
-                  }
-
-                  return Array.from(groupedFields.values()).map(
-                    ({ formField, values }, index) => (
-                      <div key={formField.id}>
-                        {index > 0 && <Separator className="my-6" />}
-                        <div className="space-y-2">
-                          <div className="flex items-start justify-between">
-                            <div className="space-y-1">
-                              <Label className="text-base font-semibold">
-                                {formField.label}
-                              </Label>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-xs">
-                                  {formField.type}
-                                </Badge>
-                                {formField.required && (
-                                  <Badge
-                                    variant="destructive"
-                                    className="text-xs"
-                                  >
-                                    Required
-                                  </Badge>
-                                )}
-                                {values.length > 1 && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-xs"
-                                  >
-                                    Multi-select
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          {formField.helpText && (
-                            <p className="text-muted-foreground text-sm">
-                              {formField.helpText}
-                            </p>
-                          )}
-                          <div className="bg-muted mt-3 rounded-lg p-4">
-                            {values.length === 1 ? (
-                              <p className="break-words whitespace-pre-wrap">
-                                {values[0]}
-                              </p>
-                            ) : (
-                              <ul className="list-inside list-disc space-y-1">
-                                {values.map((value, i) => (
-                                  <li key={i} className="break-words">
-                                    {value}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ),
-                  );
-                })()}
-              </div>
-            )}
+          <CardContent className="py-12">
+            <p className="text-muted-foreground text-center">
+              No responses found
+            </p>
           </CardContent>
         </Card>
-      </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {response.responseFields.map((field) => {
+            // Parse value - could be JSON array or string
+            let values: string[];
+            try {
+              const parsed = JSON.parse(field.value);
+              if (Array.isArray(parsed)) {
+                values = parsed;
+              } else {
+                values = [field.value];
+              }
+            } catch {
+              // Not JSON, use as-is
+              values = [field.value];
+            }
+
+            // Check if this is a checkbox field (boolean value)
+            const isCheckbox = field.formField.type === "checkbox";
+            const checkboxValue = isCheckbox && (field.value === "true" || field.value === "Yes");
+
+            return (
+              <Card key={field.formField.id} className="overflow-hidden">
+                <CardHeader className="bg-muted/50 pb-3">
+                  <CardTitle className="text-sm font-medium">
+                    {field.formField.label}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  {isCheckbox ? (
+                    <div className="flex items-center gap-2">
+                      <div className={`flex h-5 w-5 items-center justify-center rounded border-2 ${
+                        checkboxValue 
+                          ? "bg-primary border-primary" 
+                          : "border-muted-foreground"
+                      }`}>
+                        {checkboxValue && (
+                          <svg
+                            className="h-3 w-3 text-white"
+                            fill="none"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="3"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className="text-muted-foreground text-sm">
+                        {checkboxValue ? "Checked" : "Not checked"}
+                      </span>
+                    </div>
+                  ) : values.length === 1 ? (
+                    <p className="break-words whitespace-pre-wrap text-sm leading-relaxed">
+                      {values[0]}
+                    </p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {values.map((value, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm">
+                          <span className="text-muted-foreground mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-current" />
+                          <span className="break-words">{value}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

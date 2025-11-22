@@ -21,9 +21,6 @@ export const publicRouter = createTRPCRouter({
         with: {
           fields: {
             orderBy: (fields, { asc }) => [asc(fields.order)],
-            with: {
-              options: true,
-            },
           },
           createdBy: {
             columns: {

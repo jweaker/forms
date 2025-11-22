@@ -94,9 +94,6 @@ export const formsRouter = createTRPCRouter({
         with: {
           fields: {
             orderBy: (fields, { asc }) => [asc(fields.order)],
-            with: {
-              options: true,
-            },
           },
           responses: {
             orderBy: (responses, { desc }) => [desc(responses.createdAt)],
@@ -138,9 +135,6 @@ export const formsRouter = createTRPCRouter({
         with: {
           fields: {
             orderBy: (fields, { asc }) => [asc(fields.order)],
-            with: {
-              options: true,
-            },
           },
         },
       });
@@ -308,9 +302,6 @@ export const formsRouter = createTRPCRouter({
         with: {
           fields: {
             orderBy: (fields, { asc }) => [asc(fields.order)],
-            with: {
-              options: true,
-            },
           },
         },
       });
@@ -370,6 +361,11 @@ export const formsRouter = createTRPCRouter({
           eq(forms.id, input.id),
           eq(forms.createdById, ctx.session.user.id),
         ),
+        with: {
+          fields: {
+            orderBy: (fields, { asc }) => [asc(fields.order)],
+          },
+        },
       });
 
       if (!form) {

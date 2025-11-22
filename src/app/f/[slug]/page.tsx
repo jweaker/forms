@@ -24,6 +24,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AlertCircle, Star, Github } from "lucide-react";
 import { authClient } from "~/server/better-auth/client";
+import { MultiSelect } from "~/components/ui/multi-select";
 
 type FormField = {
   id: number;
@@ -40,15 +41,7 @@ type FormField = {
   minValue: number | null;
   maxValue: number | null;
   defaultValue: string | null;
-  options: {
-    id: number;
-    formFieldId: number;
-    optionLabel: string;
-    isDefault: boolean;
-    order: number;
-    createdAt: Date;
-    updatedAt: Date | null;
-  }[];
+  options: string | null; // JSON string
 };
 
 export default function PublicFormPage() {
@@ -83,28 +76,45 @@ export default function PublicFormPage() {
   const [comment, setComment] = useState<string>("");
   const [hoveredStar, setHoveredStar] = useState<number>(0);
 
+  // Helper to parse options from JSON
+  const parseOptions = (
+    optionsJson: string | null,
+  ): Array<{ label: string; isDefault?: boolean }> => {
+    if (!optionsJson) return [];
+    try {
+      return JSON.parse(optionsJson) as Array<{
+        label: string;
+        isDefault?: boolean;
+      }>;
+    } catch {
+      return [];
+    }
+  };
+
   // Initialize form data with default values
   useEffect(() => {
     if (form?.fields && Object.keys(formData).length === 0) {
       const initialData: Record<string, string | boolean | string[]> = {};
       form.fields.forEach((field) => {
+        const options = parseOptions(field.options);
+
         if (field.defaultValue !== null && field.defaultValue !== undefined) {
           if (field.type === "checkbox") {
             initialData[field.id] = field.defaultValue === "true";
-          } else if (field.allowMultiple && field.options.length > 0) {
+          } else if (field.allowMultiple && options.length > 0) {
             // For multi-select, set default selected options
-            const defaultOptions = field.options
+            const defaultOptions = options
               .filter((opt) => opt.isDefault)
-              .map((opt) => opt.optionLabel);
+              .map((opt) => opt.label);
             initialData[field.id] = defaultOptions;
           } else {
             initialData[field.id] = field.defaultValue;
           }
         } else if (field.allowMultiple) {
           // Initialize multi-select fields with default options
-          const defaultOptions = field.options
+          const defaultOptions = options
             .filter((opt) => opt.isDefault)
-            .map((opt) => opt.optionLabel);
+            .map((opt) => opt.label);
           initialData[field.id] = defaultOptions;
         } else if (field.type === "checkbox") {
           initialData[field.id] = false;
@@ -113,6 +123,12 @@ export default function PublicFormPage() {
           const min = field.minValue ?? 0;
           const max = field.maxValue ?? 10;
           initialData[field.id] = Math.floor((min + max) / 2).toString();
+        } else if (options.length > 0) {
+          // For single-select fields, set first isDefault option
+          const defaultOption = options.find((opt) => opt.isDefault);
+          if (defaultOption) {
+            initialData[field.id] = defaultOption.label;
+          }
         }
       });
       setFormData(initialData);
@@ -220,16 +236,13 @@ export default function PublicFormPage() {
     }
 
     // Convert formData to the expected format
-    // For multi-select fields (arrays), we'll send multiple field entries
-    const fields: { fieldId: number; value: string }[] = [];
+    const fields: { fieldId: number; value: string | string[] }[] = [];
     Object.entries(formData).forEach(([fieldId, value]) => {
       if (Array.isArray(value)) {
-        // Multi-select: create one entry per selected value
-        value.forEach((val) => {
-          fields.push({
-            fieldId: parseInt(fieldId),
-            value: val,
-          });
+        // Multi-select: send as array
+        fields.push({
+          fieldId: parseInt(fieldId),
+          value: value,
         });
       } else {
         // Single value
@@ -446,6 +459,19 @@ function renderFormField(
   const booleanValue = typeof value === "boolean" ? value : false;
   const arrayValue = Array.isArray(value) ? value : [];
 
+  // Parse options from JSON
+  let options: Array<{ label: string; isDefault?: boolean }> = [];
+  if (field.options) {
+    try {
+      options = JSON.parse(field.options) as Array<{
+        label: string;
+        isDefault?: boolean;
+      }>;
+    } catch {
+      options = [];
+    }
+  }
+
   switch (field.type) {
     case "textarea":
       return (
@@ -460,45 +486,45 @@ function renderFormField(
 
     case "select":
       if (field.allowMultiple) {
-        // Multi-select dropdown (rendered as checkboxes)
+        // Multi-select dropdown with combobox
         return (
-          <div className="space-y-2 rounded-md border p-3">
-            {field.options.map((opt) => (
-              <div key={opt.id} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`field-${field.id}-${opt.id}`}
-                  checked={arrayValue.includes(opt.optionLabel)}
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      // Check selection limit
-                      if (
-                        field.selectionLimit &&
-                        arrayValue.length >= field.selectionLimit
-                      ) {
-                        toast.error(
-                          `You can select at most ${field.selectionLimit} option(s)`,
-                        );
-                        return;
+          <MultiSelect
+            options={options.map((opt) => ({
+              label: opt.label,
+              value: opt.label,
+            }))}
+            selected={arrayValue}
+            onChange={(newValue) => onChange(newValue)}
+            placeholder={field.placeholder ?? "Select options..."}
+            maxSelections={field.selectionLimit ?? undefined}
+          />
+        );
+      } else {
+                        onChange(arrayValue.filter((v) => v !== opt.label));
                       }
-                      onChange([...arrayValue, opt.optionLabel]);
-                    } else {
-                      onChange(arrayValue.filter((v) => v !== opt.optionLabel));
-                    }
-                  }}
-                />
-                <Label
-                  htmlFor={`field-${field.id}-${opt.id}`}
-                  className="cursor-pointer font-normal"
-                >
-                  {opt.optionLabel}
-                </Label>
-              </div>
-            ))}
-            {field.selectionLimit && (
-              <p className="text-muted-foreground text-xs">
-                Select up to {field.selectionLimit} option(s)
-              </p>
-            )}
+                    }}
+                  />
+                  <Label
+                    htmlFor={`field-${field.id}-${index}`}
+                    className="cursor-pointer font-normal"
+                  >
+                    {opt.label}
+                  </Label>
+                </div>
+              ))}
+              {field.selectionLimit && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Select up to {field.selectionLimit} option(s)
+                </p>
+              )}
+              {arrayValue.length > 0 && (
+                <div className="mt-2 border-t pt-2">
+                  <p className="text-muted-foreground text-sm">
+                    Selected: {arrayValue.join(", ")}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         );
       }
@@ -512,9 +538,9 @@ function renderFormField(
             />
           </SelectTrigger>
           <SelectContent>
-            {field.options.map((opt) => (
-              <SelectItem key={opt.id} value={opt.optionLabel}>
-                {opt.optionLabel}
+            {options.map((opt, index) => (
+              <SelectItem key={index} value={opt.label}>
+                {opt.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -524,17 +550,17 @@ function renderFormField(
     case "radio":
       return (
         <RadioGroup value={stringValue} onValueChange={onChange}>
-          {field.options.map((opt) => (
-            <div key={opt.id} className="flex items-center space-x-2">
+          {options.map((opt, index) => (
+            <div key={index} className="flex items-center space-x-2">
               <RadioGroupItem
-                value={opt.optionLabel}
-                id={`field-${field.id}-${opt.id}`}
+                value={opt.label}
+                id={`field-${field.id}-${index}`}
               />
               <Label
-                htmlFor={`field-${field.id}-${opt.id}`}
+                htmlFor={`field-${field.id}-${index}`}
                 className="cursor-pointer font-normal"
               >
-                {opt.optionLabel}
+                {opt.label}
               </Label>
             </div>
           ))}
@@ -544,11 +570,11 @@ function renderFormField(
     case "checkbox-group":
       return (
         <div className="space-y-2">
-          {field.options.map((opt) => (
-            <div key={opt.id} className="flex items-center space-x-2">
+          {options.map((opt, index) => (
+            <div key={index} className="flex items-center space-x-2">
               <Checkbox
-                id={`field-${field.id}-${opt.id}`}
-                checked={arrayValue.includes(opt.optionLabel)}
+                id={`field-${field.id}-${index}`}
+                checked={arrayValue.includes(opt.label)}
                 onCheckedChange={(checked) => {
                   if (checked) {
                     // Check selection limit
@@ -561,17 +587,17 @@ function renderFormField(
                       );
                       return;
                     }
-                    onChange([...arrayValue, opt.optionLabel]);
+                    onChange([...arrayValue, opt.label]);
                   } else {
-                    onChange(arrayValue.filter((v) => v !== opt.optionLabel));
+                    onChange(arrayValue.filter((v) => v !== opt.label));
                   }
                 }}
               />
               <Label
-                htmlFor={`field-${field.id}-${opt.id}`}
+                htmlFor={`field-${field.id}-${index}`}
                 className="cursor-pointer font-normal"
               >
-                {opt.optionLabel}
+                {opt.label}
               </Label>
             </div>
           ))}
