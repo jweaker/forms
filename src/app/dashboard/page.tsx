@@ -444,7 +444,7 @@ export default function DashboardPage() {
                         >
                           <BarChart3 className="mr-1 h-3 w-3 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
                           <span className="hidden sm:inline">Responses</span>
-                          <span className="sm:hidden">Stats</span>
+                          <span className="sm:hidden">Responses</span>
                         </Link>
                       </Button>
                     </div>
@@ -512,7 +512,7 @@ export default function DashboardPage() {
                         >
                           <BarChart3 className="mr-1 h-4 w-4 sm:mr-2" />
                           <span className="hidden sm:inline">Responses</span>
-                          <span className="sm:hidden">Stats</span>
+                          <span className="sm:hidden">Responses</span>
                         </Link>
                       </Button>
                       <Button

@@ -38,17 +38,20 @@ import {
   User,
   Star,
   Filter,
+  Search,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatDate, formatRelativeTime } from "~/lib/utils";
 import { useState, useMemo } from "react";
+import { Input } from "~/components/ui/input";
 
 export default function ResponsesPage() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
   const [versionFilter, setVersionFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   const { data: form, isLoading: formLoading } = api.forms.getBySlug.useQuery(
     {
@@ -136,6 +139,28 @@ export default function ResponsesPage() {
 
     return Array.from(versions).sort((a, b) => b - a); // Sort descending
   }, [form?.currentVersion, versionHistory, responses]);
+
+  // Filter responses based on search query
+  const filteredResponses = useMemo(() => {
+    if (!searchQuery.trim()) return responses;
+
+    const query = searchQuery.toLowerCase();
+    return responses.filter((response) => {
+      // Search in user info
+      const userName = response.createdBy?.name?.toLowerCase() ?? "";
+      const userEmail =
+        response.createdBy?.email?.toLowerCase() ??
+        response.submitterEmail?.toLowerCase() ??
+        "";
+      if (userName.includes(query) || userEmail.includes(query)) return true;
+
+      // Search in response field values
+      return response.responseFields.some((field) => {
+        const value = field.value.toLowerCase();
+        return value.includes(query);
+      });
+    });
+  }, [responses, searchQuery]);
 
   const handleDeleteResponse = (responseId: number) => {
     if (confirm("Are you sure you want to delete this response?")) {
@@ -279,16 +304,31 @@ export default function ResponsesPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-3 sm:mb-6 sm:gap-4 md:grid-cols-3">
+      {/* Search Bar */}
+      <div className="mb-4 sm:mb-6">
+        <div className="relative">
+          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+          <Input
+            placeholder="Search by user, email, or response content..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-9 pl-9 sm:h-10"
+          />
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-2 sm:mb-6 sm:gap-4 md:grid-cols-3">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2 sm:p-6">
+            <CardTitle className="text-xs font-medium sm:text-sm">
               Total Responses
             </CardTitle>
-            <FileText className="text-muted-foreground h-4 w-4" />
+            <FileText className="text-muted-foreground h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalResponses}</div>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl font-bold sm:text-2xl">
+              {totalResponses}
+            </div>
             {versionFilter !== "all" && (
               <p className="text-muted-foreground mt-1 text-xs">
                 For version {versionFilter}
@@ -297,14 +337,14 @@ export default function ResponsesPage() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2 sm:p-6">
+            <CardTitle className="text-xs font-medium sm:text-sm">
               {versionFilter === "all" ? "Current Version" : "Viewing Version"}
             </CardTitle>
-            <Calendar className="text-muted-foreground h-4 w-4" />
+            <Calendar className="text-muted-foreground h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl font-bold sm:text-2xl">
               v
               {versionFilter === "all"
                 ? (form.currentVersion ?? 1)
@@ -317,16 +357,19 @@ export default function ResponsesPage() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Status</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2 sm:p-6">
+            <CardTitle className="text-xs font-medium sm:text-sm">
+              Status
+            </CardTitle>
             <Badge
               variant={form.status === "published" ? "default" : "secondary"}
+              className="text-[10px] sm:text-xs"
             >
               {form.status}
             </Badge>
           </CardHeader>
-          <CardContent>
-            <div className="text-muted-foreground text-sm">
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-muted-foreground text-xs sm:text-sm">
               {form.status === "published"
                 ? "Accepting responses"
                 : "Not accepting responses"}
@@ -338,25 +381,28 @@ export default function ResponsesPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base sm:text-lg">
-            Responses ({totalResponses})
+            Responses ({filteredResponses.length}
+            {searchQuery && ` of ${totalResponses}`})
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {responses.length === 0 ? (
+          {filteredResponses.length === 0 ? (
             <div className="text-muted-foreground py-12 text-center sm:py-16">
               <FileText className="mx-auto mb-4 h-10 w-10 opacity-50 sm:h-12 sm:w-12" />
               <p className="text-base font-medium sm:text-lg">
-                No responses yet
+                {searchQuery ? "No matching responses" : "No responses yet"}
               </p>
               <p className="mt-1 text-xs sm:text-sm">
-                Responses will appear here once users submit your form.
+                {searchQuery
+                  ? "Try adjusting your search query"
+                  : "Responses will appear here once users submit your form."}
               </p>
             </div>
           ) : (
             <>
               {/* Mobile Card View */}
               <div className="space-y-3 md:hidden">
-                {responses.map((response) => {
+                {filteredResponses.map((response) => {
                   const fieldValues = new Map<number, string>();
                   for (const responseField of response.responseFields) {
                     let displayValue: string;
@@ -502,7 +548,7 @@ export default function ResponsesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {responses.map((response) => {
+                    {filteredResponses.map((response) => {
                       // Create map of field ID to display value
                       const fieldValues = new Map<number, string>();
                       for (const responseField of response.responseFields) {

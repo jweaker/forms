@@ -1062,7 +1062,7 @@ export default function FormBuilderPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-7xl px-3 py-4 sm:px-4 sm:py-6">
+    <div className="container mx-auto px-3 py-4 sm:px-4 sm:py-6">
       {/* Header */}
       <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 sm:gap-3">
@@ -1100,7 +1100,7 @@ export default function FormBuilderPage() {
             <Link href={`/forms/${slug}/responses`} prefetch={true}>
               <BarChart3 className="mr-1.5 h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
               <span className="hidden sm:inline">Responses</span>
-              <span className="sm:hidden">Stats</span>
+              <span className="sm:hidden">Responses</span>
             </Link>
           </Button>
           <Button
@@ -1118,39 +1118,6 @@ export default function FormBuilderPage() {
             size="sm"
             onClick={() => window.open(`/f/${form.slug}`, "_blank")}
             className="hidden sm:inline-flex"
-          >
-            <ExternalLink className="mr-2 h-3.5 w-3.5" />
-            Preview
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">{form.name}</h1>
-            <div className="text-muted-foreground mt-1 flex items-center gap-2 text-sm">
-              <Badge
-                variant={form.status === "published" ? "default" : "secondary"}
-                className="text-xs"
-              >
-                {form.status}
-              </Badge>
-              <span>•</span>
-              <span>{activeFields.length} fields</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/forms/${slug}/responses`} prefetch={true}>
-              <BarChart3 className="mr-2 h-3.5 w-3.5" />
-              Responses
-            </Link>
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleCopyLink}>
-            <Copy className="mr-2 h-3.5 w-3.5" />
-            Copy Link
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.open(`/f/${form.slug}`, "_blank")}
           >
             <ExternalLink className="mr-2 h-3.5 w-3.5" />
             Preview
@@ -1239,7 +1206,7 @@ export default function FormBuilderPage() {
           {/* Form Settings */}
           <Card>
             <CardHeader className="pb-3 sm:pb-4">
-              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <CardTitle className="flex items-center gap-1.5 text-base sm:text-lg">
                 <Settings className="h-4 w-4" />
                 Form Settings
               </CardTitle>
@@ -1547,7 +1514,7 @@ export default function FormBuilderPage() {
 
       {/* Field Dialog */}
       <Dialog open={fieldDialogOpen} onOpenChange={setFieldDialogOpen}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-full overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {fieldDialogMode === "create" ? "Add Field" : "Edit Field"}
@@ -1558,7 +1525,7 @@ export default function FormBuilderPage() {
           </DialogHeader>
           <div className="space-y-4">
             {/* Basic Info */}
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="field-label">
                   Label <span className="text-destructive">*</span>
@@ -1928,7 +1895,7 @@ export default function FormBuilderPage() {
 
       {/* AI Generation Dialog */}
       <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-full sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="text-primary h-5 w-5" />
@@ -1979,8 +1946,8 @@ export default function FormBuilderPage() {
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
                 disabled={aiLoading}
-                rows={6}
-                className="resize-none"
+                rows={4}
+                className="sm:rows-6 resize-none"
               />
               <p className="text-muted-foreground text-xs">
                 {activeFields.length > 0
