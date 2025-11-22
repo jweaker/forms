@@ -144,19 +144,33 @@ export default function ResponseDetailPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-3xl py-8">
+    <div className="container mx-auto max-w-3xl px-3 py-4 sm:px-4 sm:py-8">
       {/* Header */}
-      <div className="mb-6 flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
+      <div className="mb-4 flex items-center gap-2 sm:mb-6 sm:gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          asChild
+          className="h-8 w-8 sm:h-10 sm:w-10"
+        >
           <Link href={`/forms/${slug}/responses`}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{response.form.name}</h1>
-          <p className="text-muted-foreground text-sm">Response Details</p>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-lg font-bold sm:text-2xl">
+            {response.form.name}
+          </h1>
+          <p className="text-muted-foreground text-xs sm:text-sm">
+            Response Details
+          </p>
         </div>
-        <Button variant="ghost" size="icon" onClick={handleDelete}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleDelete}
+          className="h-8 w-8 sm:h-10 sm:w-10"
+        >
           <Trash className="h-4 w-4" />
         </Button>
       </div>
@@ -164,10 +178,10 @@ export default function ResponseDetailPage() {
       {/* Main Content Card */}
       <Card>
         {/* Submission Info */}
-        <CardHeader className="border-b">
-          <div className="flex items-start justify-between gap-4">
+        <CardHeader className="border-b p-4 sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="space-y-1">
-              <p className="text-sm font-medium">Submitted by</p>
+              <p className="text-xs font-medium sm:text-sm">Submitted by</p>
               <p className="text-muted-foreground text-sm">
                 {response.createdBy?.name ??
                   response.submitterEmail ??
@@ -179,37 +193,37 @@ export default function ResponseDetailPage() {
                 </p>
               )}
             </div>
-            <div className="space-y-1 text-right">
-              <p className="text-sm font-medium">Submitted</p>
+            <div className="space-y-1 sm:text-right">
+              <p className="text-xs font-medium sm:text-sm">Submitted</p>
               <p className="text-muted-foreground text-sm">
                 {formatRelativeTime(response.createdAt)}
               </p>
-              <Badge variant="outline" className="mt-1">
+              <Badge variant="outline" className="mt-1 text-xs">
                 Version {responseVersion}
               </Badge>
             </div>
           </div>
         </CardHeader>
 
-        <CardContent className="divide-y">
+        <CardContent className="divide-y p-0">
           {/* Rating and Comments Section */}
           {(response.rating ?? response.comments) && (
-            <div className="space-y-4 py-6">
+            <div className="space-y-3 p-4 sm:space-y-4 sm:p-6">
               {response.rating && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">Rating</p>
+                  <p className="text-xs font-medium sm:text-sm">Rating</p>
                   <div className="flex items-center gap-1">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <Star
                         key={star}
-                        className={`h-5 w-5 ${
+                        className={`h-4 w-4 sm:h-5 sm:w-5 ${
                           star <= response.rating!
                             ? "fill-yellow-400 text-yellow-400"
                             : "text-muted-foreground/30"
                         }`}
                       />
                     ))}
-                    <span className="text-muted-foreground ml-2 text-sm">
+                    <span className="text-muted-foreground ml-2 text-xs sm:text-sm">
                       {response.rating} / 5
                     </span>
                   </div>
@@ -217,7 +231,7 @@ export default function ResponseDetailPage() {
               )}
               {response.comments && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">Comments</p>
+                  <p className="text-xs font-medium sm:text-sm">Comments</p>
                   <p className="text-muted-foreground text-sm leading-relaxed">
                     {response.comments}
                   </p>
@@ -228,11 +242,11 @@ export default function ResponseDetailPage() {
 
           {/* Form Responses */}
           {response.responseFields.length === 0 ? (
-            <div className="text-muted-foreground py-12 text-center text-sm">
+            <div className="text-muted-foreground py-8 text-center text-xs sm:py-12 sm:text-sm">
               No field responses found
             </div>
           ) : (
-            <div className="space-y-6 py-6">
+            <div className="space-y-4 p-4 sm:space-y-6 sm:p-6">
               {response.responseFields.map((responseField) => {
                 // Try to get field definition from the version snapshot
                 const versionField = formVersion?.fields.find(
@@ -287,19 +301,19 @@ export default function ResponseDetailPage() {
           {history && history.length > 0 && (
             <>
               <Separator />
-              <div className="py-6">
+              <div className="p-4 sm:p-6">
                 <button
                   onClick={() => setShowHistory(!showHistory)}
-                  className="text-muted-foreground hover:text-foreground flex w-full items-center justify-between text-sm font-medium transition-colors"
+                  className="text-muted-foreground hover:text-foreground flex w-full items-center justify-between text-xs font-medium transition-colors sm:text-sm"
                 >
                   <div className="flex items-center gap-2">
-                    <History className="h-4 w-4" />
+                    <History className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     <span>Edit History ({history.length})</span>
                   </div>
                   {showHistory ? (
-                    <ChevronUp className="h-4 w-4" />
+                    <ChevronUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   ) : (
-                    <ChevronDown className="h-4 w-4" />
+                    <ChevronDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   )}
                 </button>
 

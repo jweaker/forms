@@ -199,17 +199,17 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-7xl px-4 py-6">
+    <div className="container mx-auto max-w-7xl px-4 py-4 sm:py-6">
       {/* Header */}
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex-shrink-0">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="text-2xl font-bold sm:text-3xl">Dashboard</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm">
             Manage your forms and submissions
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* User Menu */}
           <UserMenu />
         </div>
@@ -235,11 +235,11 @@ export default function DashboardPage() {
         {/* Forms Tab Content */}
         <TabsContent value="forms">
           {/* Forms Header with Search */}
-          <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-1 items-center gap-3">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
               {/* Search Bar */}
               {forms && forms.items.length > 0 && (
-                <div className="relative flex-1 lg:max-w-md">
+                <div className="relative flex-1 sm:max-w-md">
                   <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                   <Input
                     placeholder="Search forms..."
@@ -250,31 +250,35 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* View Toggle */}
-              <Tabs
-                value={viewMode}
-                onValueChange={(v: string) => setViewMode(v as ViewMode)}
-                className="flex-shrink-0"
-              >
-                <TabsList>
-                  <TabsTrigger value="grid" className="px-3">
-                    <LayoutGrid className="h-4 w-4" />
-                  </TabsTrigger>
-                  <TabsTrigger value="list" className="px-3">
-                    <List className="h-4 w-4" />
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+              {/* View Toggle and Create Button Row */}
+              <div className="flex items-center gap-2">
+                {/* View Toggle */}
+                <Tabs
+                  value={viewMode}
+                  onValueChange={(v: string) => setViewMode(v as ViewMode)}
+                  className="flex-shrink-0"
+                >
+                  <TabsList>
+                    <TabsTrigger value="grid" className="px-3">
+                      <LayoutGrid className="h-4 w-4" />
+                    </TabsTrigger>
+                    <TabsTrigger value="list" className="px-3">
+                      <List className="h-4 w-4" />
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
 
-              {/* Create Button */}
-              <Button
-                onClick={handleCreateForm}
-                disabled={createFormMutation.isPending}
-                className="flex-shrink-0"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                New Form
-              </Button>
+                {/* Create Button */}
+                <Button
+                  onClick={handleCreateForm}
+                  disabled={createFormMutation.isPending}
+                  className="flex-1 sm:flex-initial"
+                  size="default"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  <span className="sm:inline">New Form</span>
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -315,16 +319,16 @@ export default function DashboardPage() {
             </Card>
           ) : viewMode === "grid" ? (
             /* Grid View */
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredForms.map((form) => (
                 <Card
                   key={form.id}
                   className="group hover:border-primary/20 flex flex-col pt-2 transition-all hover:shadow-md"
                 >
-                  <CardHeader className="p-4 pb-3">
+                  <CardHeader className="p-3 pb-3 sm:p-4">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <h3 className="truncate text-base leading-tight font-semibold">
+                        <h3 className="truncate text-sm leading-tight font-semibold sm:text-base">
                           {form.name}
                         </h3>
                         {form.description && (
@@ -386,27 +390,31 @@ export default function DashboardPage() {
                       >
                         {form.status}
                       </Badge>
-                      <span className="text-muted-foreground">
+                      <span className="text-muted-foreground text-[10px] sm:text-xs">
                         {formatRelativeTime(form.updatedAt)}
                       </span>
                     </div>
                   </CardHeader>
 
-                  <CardContent className="flex-1 px-4 pt-0 pb-0">
+                  <CardContent className="flex-1 px-3 pt-0 pb-0 sm:px-4">
                     {/* Stats */}
-                    <div className="text-muted-foreground flex items-center gap-4 text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <MessageSquare className="h-3.5 w-3.5" />
+                    <div className="text-muted-foreground flex items-center gap-3 text-[10px] sm:gap-4 sm:text-xs">
+                      <div className="flex items-center gap-1 sm:gap-1.5">
+                        <MessageSquare className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                         <span>
-                          {form.responseCount ?? 0} response
-                          {form.responseCount !== 1 ? "s" : ""}
+                          {form.responseCount ?? 0}{" "}
+                          <span className="hidden sm:inline">
+                            response{form.responseCount !== 1 ? "s" : ""}
+                          </span>
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5" />
+                      <div className="flex items-center gap-1 sm:gap-1.5">
+                        <FileText className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                         <span>
-                          {form.fields.length} field
-                          {form.fields.length !== 1 ? "s" : ""}
+                          {form.fields.length}{" "}
+                          <span className="hidden sm:inline">
+                            field{form.fields.length !== 1 ? "s" : ""}
+                          </span>
                         </span>
                       </div>
                     </div>
@@ -417,10 +425,10 @@ export default function DashboardPage() {
                         variant="outline"
                         size="sm"
                         asChild
-                        className="h-8 flex-1 text-xs"
+                        className="h-8 flex-1 text-[10px] sm:text-xs"
                       >
                         <Link href={`/forms/${form.slug}/edit`} prefetch={true}>
-                          <Edit className="mr-1.5 h-3.5 w-3.5" />
+                          <Edit className="mr-1 h-3 w-3 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
                           Edit
                         </Link>
                       </Button>
@@ -428,14 +436,15 @@ export default function DashboardPage() {
                         variant="outline"
                         size="sm"
                         asChild
-                        className="h-8 flex-1 text-xs"
+                        className="h-8 flex-1 text-[10px] sm:text-xs"
                       >
                         <Link
                           href={`/forms/${form.slug}/responses`}
                           prefetch={true}
                         >
-                          <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
-                          Responses
+                          <BarChart3 className="mr-1 h-3 w-3 sm:mr-1.5 sm:h-3.5 sm:w-3.5" />
+                          <span className="hidden sm:inline">Responses</span>
+                          <span className="sm:hidden">Stats</span>
                         </Link>
                       </Button>
                     </div>
@@ -451,10 +460,12 @@ export default function DashboardPage() {
                   key={form.id}
                   className="hover:border-primary/20 p-2 transition-all hover:shadow-md"
                 >
-                  <CardContent className="flex items-center justify-between p-4">
+                  <CardContent className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
                     <div className="min-w-0 flex-1">
-                      <div className="mb-1 flex items-center gap-2">
-                        <h3 className="truncate font-semibold">{form.name}</h3>
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <h3 className="truncate text-sm font-semibold sm:text-base">
+                          {form.name}
+                        </h3>
                         <Badge
                           variant={
                             form.status === "published"
@@ -466,19 +477,25 @@ export default function DashboardPage() {
                           {form.status}
                         </Badge>
                       </div>
-                      <div className="text-muted-foreground flex items-center gap-3 text-xs">
-                        <span>{formatRelativeTime(form.updatedAt)}</span>
-                        <span>•</span>
+                      <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-[10px] sm:gap-3 sm:text-xs">
+                        <span className="text-xs sm:text-sm">
+                          {formatRelativeTime(form.updatedAt)}
+                        </span>
+                        <span className="hidden sm:inline">•</span>
                         <span className="flex items-center gap-1">
                           <MessageSquare className="h-3 w-3" />
-                          {form.responseCount ?? 0} response
-                          {form.responseCount !== 1 ? "s" : ""}
+                          {form.responseCount ?? 0}
+                          <span className="hidden sm:inline">
+                            response{form.responseCount !== 1 ? "s" : ""}
+                          </span>
                         </span>
-                        <span>•</span>
+                        <span className="hidden sm:inline">•</span>
                         <span className="flex items-center gap-1">
                           <FileText className="h-3 w-3" />
-                          {form.fields.length} field
-                          {form.fields.length !== 1 ? "s" : ""}
+                          {form.fields.length}
+                          <span className="hidden sm:inline">
+                            field{form.fields.length !== 1 ? "s" : ""}
+                          </span>
                         </span>
                       </div>
                     </div>
@@ -487,24 +504,25 @@ export default function DashboardPage() {
                         variant="outline"
                         size="sm"
                         asChild
-                        className="h-9"
+                        className="h-8 flex-1 sm:h-9 sm:flex-initial"
                       >
                         <Link
                           href={`/forms/${form.slug}/responses`}
                           prefetch={true}
                         >
-                          <BarChart3 className="mr-2 h-4 w-4" />
-                          Responses
+                          <BarChart3 className="mr-1 h-4 w-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Responses</span>
+                          <span className="sm:hidden">Stats</span>
                         </Link>
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         asChild
-                        className="h-9"
+                        className="h-8 flex-1 sm:h-9 sm:flex-initial"
                       >
                         <Link href={`/forms/${form.slug}/edit`} prefetch={true}>
-                          <Edit className="mr-2 h-4 w-4" />
+                          <Edit className="mr-1 h-4 w-4 sm:mr-2" />
                           Edit
                         </Link>
                       </Button>
@@ -513,7 +531,7 @@ export default function DashboardPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-9 w-9"
+                            className="h-8 w-8 sm:h-9 sm:w-9"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </Button>

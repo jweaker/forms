@@ -1062,14 +1062,65 @@ export default function FormBuilderPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-7xl px-4 py-6">
+    <div className="container mx-auto max-w-7xl px-3 py-4 sm:px-4 sm:py-6">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
+      <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            asChild
+            className="h-8 w-8 sm:h-10 sm:w-10"
+          >
             <Link href="/dashboard">
               <ArrowLeft className="h-4 w-4" />
             </Link>
+          </Button>
+          <div>
+            <h1 className="text-lg font-bold sm:text-2xl">{form.name}</h1>
+            <div className="text-muted-foreground mt-1 flex items-center gap-2 text-xs sm:text-sm">
+              <Badge
+                variant={form.status === "published" ? "default" : "secondary"}
+                className="text-[10px] sm:text-xs"
+              >
+                {form.status}
+              </Badge>
+              <span className="hidden sm:inline">•</span>
+              <span>{activeFields.length} fields</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+            className="h-8 flex-1 text-xs sm:h-auto sm:flex-initial"
+          >
+            <Link href={`/forms/${slug}/responses`} prefetch={true}>
+              <BarChart3 className="mr-1.5 h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
+              <span className="hidden sm:inline">Responses</span>
+              <span className="sm:hidden">Stats</span>
+            </Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCopyLink}
+            className="h-8 flex-1 text-xs sm:h-auto sm:flex-initial"
+          >
+            <Copy className="mr-1.5 h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
+            <span className="hidden sm:inline">Copy Link</span>
+            <span className="sm:hidden">Link</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(`/f/${form.slug}`, "_blank")}
+            className="hidden sm:inline-flex"
+          >
+            <ExternalLink className="mr-2 h-3.5 w-3.5" />
+            Preview
           </Button>
           <div>
             <h1 className="text-2xl font-bold">{form.name}</h1>
@@ -1112,6 +1163,7 @@ export default function FormBuilderPage() {
               size="sm"
               onClick={handleUnpublish}
               disabled={updateFormMutation.isPending}
+              className="hidden sm:inline-flex"
             >
               <ArchiveX className="mr-2 h-3.5 w-3.5" />
               Unpublish
@@ -1122,6 +1174,7 @@ export default function FormBuilderPage() {
               size="sm"
               onClick={handleUnarchive}
               disabled={updateFormMutation.isPending}
+              className="hidden sm:inline-flex"
             >
               <ArchiveX className="mr-2 h-3.5 w-3.5" />
               Unarchive
@@ -1131,6 +1184,7 @@ export default function FormBuilderPage() {
               size="sm"
               onClick={handlePublish}
               disabled={updateFormMutation.isPending}
+              className="hidden sm:inline-flex"
             >
               <Upload className="mr-2 h-3.5 w-3.5" />
               Publish
@@ -1143,6 +1197,7 @@ export default function FormBuilderPage() {
               size="sm"
               onClick={handleArchive}
               disabled={updateFormMutation.isPending}
+              className="hidden sm:inline-flex"
             >
               <Archive className="mr-2 h-3.5 w-3.5" />
               Archive
@@ -1157,19 +1212,19 @@ export default function FormBuilderPage() {
               updateFormMutation.isPending ||
               batchSaveFieldsMutation.isPending
             }
-            className="relative"
+            className="relative h-8 flex-1 text-xs sm:h-auto sm:flex-initial sm:text-sm"
           >
             {updateFormMutation.isPending ||
             batchSaveFieldsMutation.isPending ? (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="mr-1.5 h-3 w-3 animate-spin sm:mr-2 sm:h-3.5 sm:w-3.5" />
             ) : (
-              <Save className="mr-2 h-3.5 w-3.5" />
+              <Save className="mr-1.5 h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
             )}
             Save
             {hasVersionBreakingChanges && (
               <Badge
                 variant="destructive"
-                className="ml-2 h-4 px-1 text-[10px] font-normal"
+                className="ml-1.5 h-4 px-1 text-[9px] font-normal sm:ml-2 sm:text-[10px]"
               >
                 New Version
               </Badge>
@@ -1178,21 +1233,23 @@ export default function FormBuilderPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr,380px]">
+      <div className="grid gap-4 lg:grid-cols-[1fr,380px] lg:gap-6">
         {/* Main Content */}
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {/* Form Settings */}
           <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
+            <CardHeader className="pb-3 sm:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                 <Settings className="h-4 w-4" />
                 Form Settings
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
+            <CardContent className="space-y-3 sm:space-y-4">
+              <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="form-name">Form Name</Label>
+                  <Label htmlFor="form-name" className="text-sm">
+                    Form Name
+                  </Label>
                   <Input
                     id="form-name"
                     value={formName}
@@ -1346,25 +1403,33 @@ export default function FormBuilderPage() {
 
           {/* Form Fields */}
           <Card>
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Form Fields</CardTitle>
+            <CardHeader className="pb-3 sm:pb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className="text-base sm:text-lg">
+                  Form Fields
+                </CardTitle>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => setAiDialogOpen(true)}
-                    className="relative"
+                    className="relative flex-1 text-xs sm:flex-initial"
                   >
-                    <Sparkles className="mr-2 h-3.5 w-3.5" />
-                    AI Generate
-                    <kbd className="bg-muted ml-2 hidden rounded border px-1.5 py-0.5 font-mono text-xs sm:inline-block">
+                    <Sparkles className="mr-1.5 h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
+                    <span className="hidden sm:inline">AI Generate</span>
+                    <span className="sm:hidden">AI</span>
+                    <kbd className="bg-muted ml-2 hidden rounded border px-1.5 py-0.5 font-mono text-xs lg:inline-block">
                       ⌘K
                     </kbd>
                   </Button>
-                  <Button size="sm" onClick={handleOpenCreateField}>
-                    <Plus className="mr-2 h-3.5 w-3.5" />
-                    Add Field
+                  <Button
+                    size="sm"
+                    onClick={handleOpenCreateField}
+                    className="flex-1 text-xs sm:flex-initial"
+                  >
+                    <Plus className="mr-1.5 h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
+                    <span className="hidden sm:inline">Add Field</span>
+                    <span className="sm:hidden">Add</span>
                   </Button>
                 </div>
               </div>

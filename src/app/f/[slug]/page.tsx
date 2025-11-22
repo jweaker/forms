@@ -364,38 +364,45 @@ export default function PublicFormPage() {
   }
 
   return (
-    <div className="bg-background min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+    <div className="bg-background min-h-screen px-3 py-4 sm:px-4 sm:py-8 lg:px-8">
       <div className="container mx-auto max-w-2xl">
         <Card>
-          <CardHeader className="space-y-2">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <CardTitle className="text-2xl sm:text-3xl">
+          <CardHeader className="space-y-2 p-4 sm:p-6">
+            <div className="flex items-start justify-between gap-3 sm:gap-4">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-xl leading-tight sm:text-2xl md:text-3xl">
                   {form.name}
                 </CardTitle>
                 {form.description && (
-                  <p className="text-muted-foreground mt-2 text-sm sm:text-base">
+                  <p className="text-muted-foreground mt-2 text-sm leading-relaxed sm:text-base">
                     {form.description}
                   </p>
                 )}
               </div>
               {/* Show login/user info in top right */}
               {session ? (
-                <div className="bg-muted flex items-center gap-2 rounded-md px-2 py-1.5 text-xs">
-                  <div className="bg-primary text-primary-foreground flex h-6 w-6 items-center justify-center rounded-full font-medium">
+                <div className="bg-muted flex flex-shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs sm:gap-2">
+                  <div className="bg-primary text-primary-foreground flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-medium sm:h-6 sm:w-6 sm:text-xs">
                     {session.user.name?.[0]?.toUpperCase() ?? "U"}
                   </div>
-                  <span className="hidden sm:inline">{session.user.name}</span>
+                  <span className="hidden max-w-[100px] truncate sm:inline">
+                    {session.user.name}
+                  </span>
                 </div>
               ) : (
-                <Button size="sm" variant="ghost" onClick={handleSignIn}>
-                  <Github className="mr-1.5 h-4 w-4" />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleSignIn}
+                  className="h-8 flex-shrink-0 px-2 sm:px-4"
+                >
+                  <Github className="h-4 w-4 sm:mr-1.5" />
                   <span className="hidden sm:inline">Sign in</span>
                 </Button>
               )}
             </div>
             {form.fields.length > 0 && (
-              <div className="text-muted-foreground flex items-center gap-2 text-xs">
+              <div className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-[10px] sm:gap-2 sm:text-xs">
                 <span>
                   {form.fields.length}{" "}
                   {form.fields.length === 1 ? "field" : "fields"}
@@ -415,7 +422,7 @@ export default function PublicFormPage() {
               </div>
             )}
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             {submitError && (
               <Alert variant="destructive" className="mb-4">
                 <AlertCircle className="h-4 w-4" />
@@ -427,23 +434,21 @@ export default function PublicFormPage() {
             {!form.allowAnonymous && !session && (
               <Alert className="border-primary/50 bg-primary/5 mb-4">
                 <AlertCircle className="text-primary h-4 w-4" />
-                <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm">
-                    Please sign in to submit this form
-                  </span>
+                <AlertDescription className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <span>Please sign in to submit this form</span>
                   <Button
                     size="sm"
                     onClick={handleSignIn}
-                    className="w-full sm:w-auto"
+                    className="w-full text-xs sm:w-auto"
                   >
-                    <Github className="mr-2 h-4 w-4" />
+                    <Github className="mr-2 h-3.5 w-3.5" />
                     Sign in with GitHub
                   </Button>
                 </AlertDescription>
               </Alert>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
               {form.fields.map((field) => (
                 <div key={field.id} className="space-y-2">
                   <Label
@@ -478,9 +483,9 @@ export default function PublicFormPage() {
               ))}
 
               {/* Rating and Comment Section */}
-              <Separator className="my-6" />
+              <Separator className="my-4 sm:my-6" />
 
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
                     Rating{" "}
@@ -488,7 +493,7 @@ export default function PublicFormPage() {
                       (Optional)
                     </span>
                   </Label>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 sm:gap-1.5">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
                         key={star}
@@ -496,23 +501,18 @@ export default function PublicFormPage() {
                         onClick={() => setRating(star)}
                         onMouseEnter={() => setHoveredStar(star)}
                         onMouseLeave={() => setHoveredStar(0)}
-                        className="transition-transform hover:scale-110"
+                        className="transition-transform hover:scale-110 active:scale-95"
                         aria-label={`Rate ${star} out of 5`}
                       >
                         <Star
-                          className={`h-7 w-7 transition-colors sm:h-8 sm:w-8 ${
+                          className={`h-6 w-6 sm:h-7 sm:w-7 ${
                             star <= (hoveredStar || rating)
                               ? "fill-yellow-400 text-yellow-400"
-                              : "text-muted-foreground/40"
+                              : "text-muted-foreground/30"
                           }`}
                         />
                       </button>
                     ))}
-                    {rating > 0 && (
-                      <span className="text-muted-foreground ml-2 text-sm">
-                        {rating} / 5
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -527,8 +527,9 @@ export default function PublicFormPage() {
                     id="comment"
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
-                    placeholder="Any additional comments or feedback..."
+                    placeholder="Share your thoughts..."
                     rows={3}
+                    className="resize-none text-sm"
                   />
                 </div>
               </div>
@@ -536,11 +537,10 @@ export default function PublicFormPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={
-                  submitMutation.isPending || (!form.allowAnonymous && !session)
-                }
+                disabled={submitMutation.isPending}
+                size="lg"
               >
-                {submitMutation.isPending ? "Submitting..." : "Submit"}
+                {submitMutation.isPending ? "Submitting..." : "Submit Response"}
               </Button>
             </form>
           </CardContent>

@@ -220,24 +220,31 @@ export default function ResponsesPage() {
   }
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
+    <div className="container mx-auto px-3 py-4 sm:px-4 sm:py-8">
+      <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            asChild
+            className="h-8 w-8 sm:h-10 sm:w-10"
+          >
             <Link href="/dashboard">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">{form.name}</h1>
-            <p className="text-muted-foreground">Form Responses</p>
+            <h1 className="text-xl font-bold sm:text-3xl">{form.name}</h1>
+            <p className="text-muted-foreground text-xs sm:text-sm">
+              Form Responses
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {availableVersions.length > 0 && (
             <Select value={versionFilter} onValueChange={setVersionFilter}>
-              <SelectTrigger className="w-[180px]">
-                <Filter className="mr-2 h-4 w-4" />
+              <SelectTrigger className="h-8 w-[140px] text-xs sm:h-10 sm:w-[180px] sm:text-sm">
+                <Filter className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />
                 <SelectValue placeholder="All versions" />
               </SelectTrigger>
               <SelectContent>
@@ -250,19 +257,29 @@ export default function ResponsesPage() {
               </SelectContent>
             </Select>
           )}
-          <Button variant="outline" asChild>
+          <Button
+            variant="outline"
+            asChild
+            className="h-8 flex-1 text-xs sm:h-10 sm:flex-initial sm:text-sm"
+          >
             <Link href={`/forms/${slug}/edit`} prefetch={true}>
-              Edit Form
+              <span className="hidden sm:inline">Edit Form</span>
+              <span className="sm:hidden">Edit</span>
             </Link>
           </Button>
-          <Button onClick={handleExportCSV} disabled={responses.length === 0}>
-            <Download className="mr-2 h-4 w-4" />
-            Export CSV
+          <Button
+            onClick={handleExportCSV}
+            disabled={responses.length === 0}
+            className="h-8 flex-1 text-xs sm:h-10 sm:flex-initial sm:text-sm"
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">Export CSV</span>
+            <span className="sm:hidden">Export</span>
           </Button>
         </div>
       </div>
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
+      <div className="mb-4 grid gap-3 sm:mb-6 sm:gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -320,137 +337,90 @@ export default function ResponsesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Responses ({totalResponses})</CardTitle>
+          <CardTitle className="text-base sm:text-lg">
+            Responses ({totalResponses})
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {responses.length === 0 ? (
-            <div className="text-muted-foreground py-16 text-center">
-              <FileText className="mx-auto mb-4 h-12 w-12 opacity-50" />
-              <p className="text-lg font-medium">No responses yet</p>
-              <p className="mt-1 text-sm">
+            <div className="text-muted-foreground py-12 text-center sm:py-16">
+              <FileText className="mx-auto mb-4 h-10 w-10 opacity-50 sm:h-12 sm:w-12" />
+              <p className="text-base font-medium sm:text-lg">
+                No responses yet
+              </p>
+              <p className="mt-1 text-xs sm:text-sm">
                 Responses will appear here once users submit your form.
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Submitted</TableHead>
-                    <TableHead>User</TableHead>
-                    {availableVersions.length > 1 && (
-                      <TableHead>Version</TableHead>
-                    )}
-                    <TableHead>Rating</TableHead>
-                    <TableHead>IP Address</TableHead>
-                    {displayFields.slice(0, 2).map((field) => (
-                      <TableHead key={field.id}>{field.label}</TableHead>
-                    ))}
-                    {displayFields.length > 2 && (
-                      <TableHead>+{displayFields.length - 2} more</TableHead>
-                    )}
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {responses.map((response) => {
-                    // Create map of field ID to display value
-                    const fieldValues = new Map<number, string>();
-                    for (const responseField of response.responseFields) {
-                      // Parse value - could be JSON array or string
-                      let displayValue: string;
-                      try {
-                        const parsed = JSON.parse(responseField.value) as
-                          | string[]
-                          | string;
-                        if (Array.isArray(parsed)) {
-                          // Multi-select: join array values
-                          displayValue = parsed.join(", ");
-                        } else {
-                          displayValue = responseField.value;
-                        }
-                      } catch {
-                        // Not JSON, use as-is
+            <>
+              {/* Mobile Card View */}
+              <div className="space-y-3 md:hidden">
+                {responses.map((response) => {
+                  const fieldValues = new Map<number, string>();
+                  for (const responseField of response.responseFields) {
+                    let displayValue: string;
+                    try {
+                      const parsed = JSON.parse(responseField.value) as
+                        | string[]
+                        | string;
+                      if (Array.isArray(parsed)) {
+                        displayValue = parsed.join(", ");
+                      } else {
                         displayValue = responseField.value;
                       }
-                      fieldValues.set(responseField.formFieldId, displayValue);
+                    } catch {
+                      displayValue = responseField.value;
                     }
+                    fieldValues.set(responseField.formFieldId, displayValue);
+                  }
 
-                    return (
-                      <TableRow key={response.id}>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-sm">
-                              {formatRelativeTime(response.createdAt)}
-                            </span>
-                            <span className="text-muted-foreground text-xs">
-                              {formatDate(response.createdAt)}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="text-muted-foreground h-4 w-4" />
-                            <div className="flex flex-col">
-                              <span className="text-sm">
+                  return (
+                    <Card key={response.id} className="border">
+                      <CardContent className="p-4">
+                        <div className="mb-3 flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <User className="text-muted-foreground h-4 w-4" />
+                              <span className="text-sm font-medium">
                                 {response.createdBy?.name ??
                                   response.submitterEmail ??
                                   "Anonymous"}
                               </span>
-                              {response.createdBy?.email && (
-                                <span className="text-muted-foreground text-xs">
-                                  {response.createdBy.email}
-                                </span>
+                            </div>
+                            <div className="text-muted-foreground mt-1 flex items-center gap-2 text-xs">
+                              <span>
+                                {formatRelativeTime(response.createdAt)}
+                              </span>
+                              {availableVersions.length > 1 && (
+                                <>
+                                  <span>•</span>
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px]"
+                                  >
+                                    v{response.formVersion ?? 1}
+                                  </Badge>
+                                </>
+                              )}
+                              {response.rating && (
+                                <>
+                                  <span>•</span>
+                                  <div className="flex items-center gap-1">
+                                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                                    <span>{response.rating}/5</span>
+                                  </div>
+                                </>
                               )}
                             </div>
                           </div>
-                        </TableCell>
-                        {availableVersions.length > 1 && (
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">
-                              v{response.formVersion ?? 1}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {response.rating ? (
-                              <>
-                                <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                                <span className="text-sm">
-                                  {response.rating}/5
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">
-                                -
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-muted-foreground font-mono text-xs">
-                            {response.ipAddress ?? "-"}
-                          </span>
-                        </TableCell>
-                        {displayFields.slice(0, 2).map((field) => (
-                          <TableCell key={field.id}>
-                            <div className="max-w-[200px] truncate text-sm">
-                              {fieldValues.get(field.id) ?? "-"}
-                            </div>
-                          </TableCell>
-                        ))}
-                        {displayFields.length > 2 && (
-                          <TableCell>
-                            <span className="text-muted-foreground text-xs">
-                              ...
-                            </span>
-                          </TableCell>
-                        )}
-                        <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                              >
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -476,13 +446,196 @@ export default function ResponsesPage() {
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                        </div>
+
+                        {/* Show first 2 fields */}
+                        {displayFields.slice(0, 2).map((field) => (
+                          <div key={field.id} className="mt-2 border-t pt-2">
+                            <p className="text-muted-foreground text-xs font-medium">
+                              {field.label}
+                            </p>
+                            <p className="mt-1 line-clamp-2 text-sm">
+                              {fieldValues.get(field.id) ?? "-"}
+                            </p>
+                          </div>
+                        ))}
+
+                        {displayFields.length > 2 && (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="mt-2 h-auto p-0 text-xs"
+                            onClick={() =>
+                              router.push(
+                                `/forms/${slug}/responses/${response.id}`,
+                              )
+                            }
+                          >
+                            View all {displayFields.length} fields →
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden overflow-x-auto md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Submitted</TableHead>
+                      <TableHead>User</TableHead>
+                      {availableVersions.length > 1 && (
+                        <TableHead>Version</TableHead>
+                      )}
+                      <TableHead>Rating</TableHead>
+                      <TableHead>IP Address</TableHead>
+                      {displayFields.slice(0, 2).map((field) => (
+                        <TableHead key={field.id}>{field.label}</TableHead>
+                      ))}
+                      {displayFields.length > 2 && (
+                        <TableHead>+{displayFields.length - 2} more</TableHead>
+                      )}
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {responses.map((response) => {
+                      // Create map of field ID to display value
+                      const fieldValues = new Map<number, string>();
+                      for (const responseField of response.responseFields) {
+                        // Parse value - could be JSON array or string
+                        let displayValue: string;
+                        try {
+                          const parsed = JSON.parse(responseField.value) as
+                            | string[]
+                            | string;
+                          if (Array.isArray(parsed)) {
+                            // Multi-select: join array values
+                            displayValue = parsed.join(", ");
+                          } else {
+                            displayValue = responseField.value;
+                          }
+                        } catch {
+                          // Not JSON, use as-is
+                          displayValue = responseField.value;
+                        }
+                        fieldValues.set(
+                          responseField.formFieldId,
+                          displayValue,
+                        );
+                      }
+
+                      return (
+                        <TableRow key={response.id}>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-sm">
+                                {formatRelativeTime(response.createdAt)}
+                              </span>
+                              <span className="text-muted-foreground text-xs">
+                                {formatDate(response.createdAt)}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <User className="text-muted-foreground h-4 w-4" />
+                              <div className="flex flex-col">
+                                <span className="text-sm">
+                                  {response.createdBy?.name ??
+                                    response.submitterEmail ??
+                                    "Anonymous"}
+                                </span>
+                                {response.createdBy?.email && (
+                                  <span className="text-muted-foreground text-xs">
+                                    {response.createdBy.email}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          {availableVersions.length > 1 && (
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">
+                                v{response.formVersion ?? 1}
+                              </Badge>
+                            </TableCell>
+                          )}
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              {response.rating ? (
+                                <>
+                                  <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                                  <span className="text-sm">
+                                    {response.rating}/5
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">
+                                  -
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground font-mono text-xs">
+                              {response.ipAddress ?? "-"}
+                            </span>
+                          </TableCell>
+                          {displayFields.slice(0, 2).map((field) => (
+                            <TableCell key={field.id}>
+                              <div className="max-w-[200px] truncate text-sm">
+                                {fieldValues.get(field.id) ?? "-"}
+                              </div>
+                            </TableCell>
+                          ))}
+                          {displayFields.length > 2 && (
+                            <TableCell>
+                              <span className="text-muted-foreground text-xs">
+                                ...
+                              </span>
+                            </TableCell>
+                          )}
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    router.push(
+                                      `/forms/${slug}/responses/${response.id}`,
+                                    )
+                                  }
+                                >
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    handleDeleteResponse(response.id)
+                                  }
+                                  className="text-destructive"
+                                >
+                                  <Trash className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
