@@ -33,7 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Plus,
   Save,
@@ -121,13 +121,11 @@ export default function FormBuilderPage() {
   const { data: form, isLoading } = api.forms.getBySlug.useQuery({ slug });
   const updateFormMutation = api.forms.update.useMutation({
     onSuccess: (updatedForm) => {
-      toast.success("Form updated successfully");
-
-      // If slug changed, navigate to new URL without reload
-      if (updatedForm && updatedForm.slug !== slug) {
-        router.replace(`/forms/${updatedForm.slug}/edit`);
-      } else {
-        void utils.forms.getBySlug.invalidate({ slug });
+      // Invalidate the query for the updated form's slug (which might be different)
+      if (updatedForm) {
+        void utils.forms.getBySlug.invalidate({ slug: updatedForm.slug });
+        // Also invalidate the dashboard list so it shows the updated slug
+        void utils.forms.list.invalidate();
       }
     },
     onError: (error) => {
@@ -137,7 +135,6 @@ export default function FormBuilderPage() {
 
   const createFieldMutation = api.formFields.create.useMutation({
     onSuccess: () => {
-      toast.success("Field created successfully");
       void utils.forms.getBySlug.invalidate({ slug });
       setFieldDialogOpen(false);
       resetFieldDialog();
@@ -149,7 +146,6 @@ export default function FormBuilderPage() {
 
   const updateFieldMutation = api.formFields.update.useMutation({
     onSuccess: () => {
-      toast.success("Field updated successfully");
       void utils.forms.getBySlug.invalidate({ slug });
       setFieldDialogOpen(false);
       resetFieldDialog();
@@ -159,43 +155,15 @@ export default function FormBuilderPage() {
     },
   });
 
-  const deleteFieldMutation = api.formFields.delete.useMutation({
-    onSuccess: () => {
-      toast.success("Field deleted successfully");
-      void utils.forms.getBySlug.invalidate({ slug });
-    },
-    onError: (error) => {
-      toast.error(`Failed to delete field: ${error.message}`);
-    },
-  });
-
-  const reorderFieldsMutation = api.formFields.reorder.useMutation({
-    onSuccess: () => {
-      void utils.forms.getBySlug.invalidate({ slug });
-    },
-    onError: (error) => {
-      toast.error(`Failed to reorder fields: ${error.message}`);
-    },
-  });
-
-  const duplicateFieldMutation = api.formFields.duplicate.useMutation({
-    onSuccess: () => {
-      toast.success("Field duplicated successfully");
-      void utils.forms.getBySlug.invalidate({ slug });
-    },
-    onError: (error) => {
-      toast.error(`Failed to duplicate field: ${error.message}`);
-    },
-  });
-
   const batchSaveFieldsMutation = api.forms.batchSaveFields.useMutation({
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (result.versionChanged) {
         toast.success(`Changes saved (new version ${result.newVersion})`);
       } else {
         toast.success("Changes saved successfully");
       }
-      void utils.forms.getBySlug.invalidate({ slug });
+      // Wait for refetch to complete before clearing local state
+      await utils.forms.getBySlug.refetch({ slug });
       setLocalFields(null); // Clear local state after successful save
     },
     onError: (error) => {
@@ -212,6 +180,10 @@ export default function FormBuilderPage() {
   const [formName, setFormName] = useState("");
   const [formSlug, setFormSlug] = useState("");
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+  const [isFirstLoad, setIsFirstLoad] = useState(true); // Track if this is the first load
+  const [isFirstFocus, setIsFirstFocus] = useState(true);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+  const [checkingSlug, setCheckingSlug] = useState(false);
   const [formDescription, setFormDescription] = useState("");
   const [formStatus, setFormStatus] = useState<
     "draft" | "published" | "archived"
@@ -262,8 +234,9 @@ export default function FormBuilderPage() {
 
   useEffect(() => {
     if (form) {
+      // Always update state when form data changes
       setFormName(form.name);
-      setFormSlug(form.slug);
+      setFormSlug(form.slug); // Always use the slug from the database
       setFormDescription(form.description ?? "");
       setFormStatus(form.status as "draft" | "published" | "archived");
       setAllowAnonymous(form.allowAnonymous);
@@ -271,28 +244,73 @@ export default function FormBuilderPage() {
       setAllowEditing(form.allowEditing ?? false);
       setOpenTime(form.openTime ?? null);
       setDeadline(form.deadline ?? null);
-      // Reset slug manually edited flag when form loads
-      setSlugManuallyEdited(false);
+
+      // On first load, check if form is "new" (unpublished AND no fields)
+      // Only allow slug auto-generation for brand new unpublished forms
+      if (isFirstLoad) {
+        const isNewUnpublishedForm =
+          form.status === "draft" && form.fields.length === 0;
+        setSlugManuallyEdited(!isNewUnpublishedForm); // false for new, true for existing
+        setIsFirstLoad(false);
+      }
+
+      setIsFirstFocus(true);
     }
-  }, [form]);
+  }, [form?.id, form?.slug, isFirstLoad]); // Depend on id, slug, and isFirstLoad
 
   // Helper function to generate slug from name
-  const generateSlug = (name: string) => {
+  const generateSlugFromName = (name: string) => {
     return name
       .toLowerCase()
       .trim()
       .replace(/[^\w\s-]/g, "") // Remove special characters
       .replace(/\s+/g, "-") // Replace spaces with hyphens
       .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
-      .replace(/^-+|-+$/g, ""); // Remove leading/trailing hyphens
+      .replace(/^-+|-+$/g, "") // Remove leading/trailing hyphens
+      .substring(0, 256); // Match backend length limit
   };
 
   // Auto-generate slug from name if not manually edited
   useEffect(() => {
-    if (!slugManuallyEdited && formName) {
-      setFormSlug(generateSlug(formName));
+    // Only auto-generate for unpublished forms without fields that haven't been manually edited
+    if (!slugManuallyEdited && formName && formStatus === "draft") {
+      setFormSlug(generateSlugFromName(formName));
     }
-  }, [formName, slugManuallyEdited]);
+  }, [formName, slugManuallyEdited, formStatus]);
+
+  // Debounced slug availability check
+  useEffect(() => {
+    if (!formSlug || !form) return;
+
+    const normalizedSlug = generateSlugFromName(formSlug);
+
+    // Don't check if slug hasn't changed from original
+    if (normalizedSlug === form.slug) {
+      setSlugAvailable(true);
+      setCheckingSlug(false);
+      return;
+    }
+
+    setCheckingSlug(true);
+    const timeoutId = setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await utils.forms.checkSlugAvailability.fetch({
+            slug: normalizedSlug,
+            excludeFormId: form.id,
+          });
+          setSlugAvailable(result.available);
+        } catch (error) {
+          console.error("Error checking slug availability:", error);
+          setSlugAvailable(null);
+        } finally {
+          setCheckingSlug(false);
+        }
+      })();
+    }, 200); // 200ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [formSlug, form, utils]);
 
   // Keyboard shortcut for AI dialog (Cmd/Ctrl + K)
   useEffect(() => {
@@ -456,13 +474,13 @@ export default function FormBuilderPage() {
     setFieldDefaultValue("");
   };
 
-  const handleOpenCreateField = () => {
+  const handleOpenCreateField = useCallback(() => {
     resetFieldDialog();
     setFieldDialogMode("create");
     setFieldDialogOpen(true);
-  };
+  }, []);
 
-  const handleOpenEditField = (field: FormField) => {
+  const handleOpenEditField = useCallback((field: FormField) => {
     setFieldDialogMode("edit");
     setEditingFieldId(field.id);
     setFieldLabel(field.label);
@@ -502,7 +520,7 @@ export default function FormBuilderPage() {
     setFieldMaxValue(field.maxValue ? field.maxValue.toString() : "");
     setFieldDefaultValue(field.defaultValue ?? "");
     setFieldDialogOpen(true);
-  };
+  }, []);
 
   const handleFieldTypeChange = (newType: FieldType) => {
     setFieldType(newType);
@@ -703,6 +721,12 @@ export default function FormBuilderPage() {
   const handleSaveForm = async () => {
     if (!form) return;
 
+    // Validate slug is available before saving
+    if (slugAvailable === false) {
+      toast.error("Cannot save: slug is already taken");
+      return;
+    }
+
     try {
       // Save form metadata if changed
       const metadataChanged =
@@ -716,8 +740,10 @@ export default function FormBuilderPage() {
         openTime?.getTime() !== form.openTime?.getTime() ||
         deadline?.getTime() !== form.deadline?.getTime();
 
+      let slugChanged = false;
+      let newSlug = formSlug;
       if (metadataChanged) {
-        await updateFormMutation.mutateAsync({
+        const updatedForm = await updateFormMutation.mutateAsync({
           id: form.id,
           name: formName,
           slug: formSlug,
@@ -730,6 +756,12 @@ export default function FormBuilderPage() {
           openTime,
           deadline,
         });
+
+        // Check if slug actually changed and store the new slug
+        if (updatedForm && updatedForm.slug !== slug) {
+          slugChanged = true;
+          newSlug = updatedForm.slug;
+        }
       }
 
       // Save fields if changed
@@ -756,6 +788,14 @@ export default function FormBuilderPage() {
           openTime,
           deadline,
         });
+      }
+
+      // If slug changed, navigate to new URL with the backend-generated slug
+      if (slugChanged) {
+        // Navigate immediately - the new page will fetch fresh data
+        // Don't invalidate the old query to avoid error logs
+        router.push(`/forms/${newSlug}/edit`);
+        return; // Early return to prevent success toast
       }
 
       // Show success only if no mutations were triggered
@@ -786,7 +826,7 @@ export default function FormBuilderPage() {
 
       // If slug changed, navigate to new URL
       if (updatedForm && updatedForm.slug !== slug) {
-        router.replace(`/forms/${updatedForm.slug}/edit`);
+        router.push(`/forms/${updatedForm.slug}/edit`);
       }
     } catch {
       // Error is already handled by mutation's onError
@@ -867,21 +907,26 @@ export default function FormBuilderPage() {
     }
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
 
-    if (over && active.id !== over.id) {
-      const currentFields = localFields ?? form?.fields ?? [];
-      const oldIndex = currentFields.findIndex(
-        (field) => field.id === active.id,
-      );
-      const newIndex = currentFields.findIndex((field) => field.id === over.id);
+      if (over && active.id !== over.id) {
+        const currentFields = localFields ?? form?.fields ?? [];
+        const oldIndex = currentFields.findIndex(
+          (field) => field.id === active.id,
+        );
+        const newIndex = currentFields.findIndex(
+          (field) => field.id === over.id,
+        );
 
-      const newOrder = arrayMove(currentFields, oldIndex, newIndex);
-      setLocalFields(newOrder);
-      toast.success("Fields reordered (not saved yet)");
-    }
-  };
+        const newOrder = arrayMove(currentFields, oldIndex, newIndex);
+        setLocalFields(newOrder);
+        toast.success("Fields reordered (not saved yet)");
+      }
+    },
+    [localFields, form?.fields],
+  );
 
   const handleCopyLink = () => {
     if (form) {
@@ -968,11 +1013,20 @@ export default function FormBuilderPage() {
       const progressToast = toast.loading("Updating form...");
 
       try {
-        // Update form settings
+        // Check if slug can be changed:
+        // Only for unpublished forms without fields that haven't been manually edited
+        const canChangeSlug =
+          form.status === "draft" &&
+          form.fields.length === 0 &&
+          !slugManuallyEdited;
+
+        // Update form settings first
+        // For forms that can change slug: don't send slug → backend will auto-generate from name
+        // For all other forms: send current slug → backend will keep it unchanged
         const updatedForm = await updateFormMutation.mutateAsync({
           id: form.id,
           name: formData.name,
-          slug: formData.slug,
+          slug: canChangeSlug ? undefined : form.slug,
           description: formData.description,
           status: form.status as "draft" | "published" | "archived",
           isPublic: form.isPublic,
@@ -982,42 +1036,52 @@ export default function FormBuilderPage() {
 
         // Update local form state to reflect changes immediately
         setFormName(formData.name);
-        setFormSlug(formData.slug);
         setFormDescription(formData.description ?? "");
         setAllowAnonymous(formData.allowAnonymous);
         setAllowMultipleSubmissions(formData.allowMultipleSubmissions);
 
-        // Convert AI fields to local FormField objects
-        const newFields: FormField[] = fieldsData.map((field, index) => ({
-          id: -(index + 1), // Temporary negative IDs
-          formId: form.id,
+        // For forms that can change slug, keep auto-generation enabled
+        if (canChangeSlug) {
+          setSlugManuallyEdited(false); // Keep allowing auto-generation
+        }
+
+        // Convert AI fields to batch save format
+        const fieldsToSave = fieldsData.map((field, index) => ({
           label: field.label,
           type: field.type,
+          placeholder: field.placeholder ?? undefined,
+          helpText: field.helpText ?? undefined,
           required: field.required,
-          placeholder: field.placeholder ?? null,
-          helpText: field.helpText ?? null,
           order: index,
-          regexPattern: field.regexPattern ?? null,
-          validationMessage: field.validationMessage ?? null,
-          options: field.options ? JSON.stringify(field.options) : null,
-          allowMultiple: field.allowMultiple ?? null,
-          selectionLimit: field.selectionLimit ?? null,
-          minValue: field.minValue ?? null,
-          maxValue: field.maxValue ?? null,
-          defaultValue: field.defaultValue ?? null,
-          createdAt: new Date(),
-          updatedAt: null,
+          regexPattern: field.regexPattern ?? undefined,
+          validationMessage: field.validationMessage ?? undefined,
+          allowMultiple: field.allowMultiple ?? undefined,
+          selectionLimit: field.selectionLimit ?? undefined,
+          minValue: field.minValue ?? undefined,
+          maxValue: field.maxValue ?? undefined,
+          defaultValue: field.defaultValue ?? undefined,
+          options: field.options ? JSON.stringify(field.options) : undefined,
         }));
 
-        setLocalFields(newFields);
+        // Save fields to database - mutation will refetch and update state
+        await batchSaveFieldsMutation.mutateAsync({
+          formId: form.id,
+          fields: fieldsToSave,
+          openTime,
+          deadline,
+        });
 
-        toast.success(
-          "Form generated successfully! Click Save to apply changes.",
-          { id: progressToast },
-        );
+        toast.success("Form generated and saved successfully!", {
+          id: progressToast,
+        });
         setAiDialogOpen(false);
         setAiPrompt("");
         setAiError(null);
+
+        // If slug changed, navigate to new URL
+        if (updatedForm && updatedForm.slug !== slug) {
+          router.push(`/forms/${updatedForm.slug}/edit`);
+        }
       } catch (updateError) {
         toast.dismiss(progressToast);
         throw updateError;
@@ -1034,12 +1098,12 @@ export default function FormBuilderPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto max-w-7xl px-4 py-6">
+      <div className="mx-auto w-full max-w-7xl overflow-x-hidden px-3 py-6 sm:px-4">
         <Skeleton className="mb-6 h-10 w-64" />
-        <div className="grid gap-6 lg:grid-cols-[1fr,400px]">
-          <div className="space-y-4">
-            <Skeleton className="h-64" />
-            <Skeleton className="h-96" />
+        <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,1fr),minmax(280px,400px)]">
+          <div className="min-w-0 space-y-4">
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-96 w-full" />
           </div>
           <Skeleton className="hidden h-[600px] lg:block" />
         </div>
@@ -1049,7 +1113,7 @@ export default function FormBuilderPage() {
 
   if (!form) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="mx-auto w-full max-w-7xl overflow-x-hidden px-3 py-8 sm:px-4">
         <div className="text-center">
           <h1 className="text-2xl font-bold">Form not found</h1>
           <Button className="mt-4" onClick={() => router.push("/dashboard")}>
@@ -1062,23 +1126,26 @@ export default function FormBuilderPage() {
   }
 
   return (
-    <div className="container mx-auto px-3 py-4 sm:px-4 sm:py-6">
+    <div className="mx-auto w-full max-w-7xl overflow-x-hidden px-3 py-4 sm:px-4 sm:py-6">
       {/* Header */}
-      <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 sm:gap-3">
+      <div className="mb-4 flex flex-col gap-3 sm:mb-6">
+        {/* Title Row */}
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <Button
             variant="ghost"
             size="icon"
             asChild
-            className="h-8 w-8 sm:h-10 sm:w-10"
+            className="h-8 w-8 flex-shrink-0 sm:h-10 sm:w-10"
           >
             <Link href="/dashboard">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div>
-            <h1 className="text-lg font-bold sm:text-2xl">{form.name}</h1>
-            <div className="text-muted-foreground mt-1 flex items-center gap-2 text-xs sm:text-sm">
+          <div className="min-w-0 flex-1">
+            <h1 className="line-clamp-1 text-base font-bold sm:text-xl md:text-2xl">
+              {form.name}
+            </h1>
+            <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-1.5 text-xs sm:gap-2 sm:text-sm">
               <Badge
                 variant={form.status === "published" ? "default" : "secondary"}
                 className="text-[10px] sm:text-xs"
@@ -1086,134 +1153,245 @@ export default function FormBuilderPage() {
                 {form.status}
               </Badge>
               <span className="hidden sm:inline">•</span>
-              <span>{activeFields.length} fields</span>
+              <span className="whitespace-nowrap">
+                {activeFields.length} fields
+              </span>
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            className="h-8 flex-1 text-xs sm:h-auto sm:flex-initial"
-          >
-            <Link href={`/forms/${slug}/responses`} prefetch={true}>
-              <BarChart3 className="mr-1.5 h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
-              <span className="hidden sm:inline">Responses</span>
-              <span className="sm:hidden">Responses</span>
-            </Link>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopyLink}
-            className="h-8 flex-1 text-xs sm:h-auto sm:flex-initial"
-          >
-            <Copy className="mr-1.5 h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
-            <span className="hidden sm:inline">Copy Link</span>
-            <span className="sm:hidden">Link</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.open(`/f/${form.slug}`, "_blank")}
-            className="hidden sm:inline-flex"
-          >
-            <ExternalLink className="mr-2 h-3.5 w-3.5" />
-            Preview
-          </Button>
 
-          {/* Status control buttons */}
-          {formStatus === "published" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleUnpublish}
-              disabled={updateFormMutation.isPending}
-              className="hidden sm:inline-flex"
-            >
-              <ArchiveX className="mr-2 h-3.5 w-3.5" />
-              Unpublish
-            </Button>
-          ) : formStatus === "archived" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleUnarchive}
-              disabled={updateFormMutation.isPending}
-              className="hidden sm:inline-flex"
-            >
-              <ArchiveX className="mr-2 h-3.5 w-3.5" />
-              Unarchive
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={handlePublish}
-              disabled={updateFormMutation.isPending}
-              className="hidden sm:inline-flex"
-            >
-              <Upload className="mr-2 h-3.5 w-3.5" />
-              Publish
-            </Button>
-          )}
-
-          {formStatus !== "archived" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleArchive}
-              disabled={updateFormMutation.isPending}
-              className="hidden sm:inline-flex"
-            >
-              <Archive className="mr-2 h-3.5 w-3.5" />
-              Archive
-            </Button>
-          )}
-
-          <Button
-            size="sm"
-            onClick={handleSaveForm}
-            disabled={
-              !hasChanges ||
-              updateFormMutation.isPending ||
-              batchSaveFieldsMutation.isPending
-            }
-            className="relative h-8 flex-1 text-xs sm:h-auto sm:flex-initial sm:text-sm"
-          >
-            {updateFormMutation.isPending ||
-            batchSaveFieldsMutation.isPending ? (
-              <Loader2 className="mr-1.5 h-3 w-3 animate-spin sm:mr-2 sm:h-3.5 sm:w-3.5" />
-            ) : (
-              <Save className="mr-1.5 h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
-            )}
-            Save
-            {hasVersionBreakingChanges && (
-              <Badge
-                variant="destructive"
-                className="ml-1.5 h-4 px-1 text-[9px] font-normal sm:ml-2 sm:text-[10px]"
+        {/* Action buttons - different layouts for mobile/desktop */}
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          {/* Mobile layout */}
+          <div className="flex w-full flex-col gap-2 sm:hidden">
+            <div className="flex w-full gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="min-w-0 flex-1 px-2 text-xs"
               >
-                New Version
-              </Badge>
+                <Link href={`/forms/${slug}/responses`} prefetch={true}>
+                  <BarChart3 className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">Responses</span>
+                </Link>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyLink}
+                className="min-w-0 flex-1 px-2 text-xs"
+              >
+                <Copy className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
+                <span className="truncate">Copy</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(`/f/${form.slug}`, "_blank")}
+                className="min-w-0 flex-1 px-2 text-xs"
+              >
+                <ExternalLink className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
+                <span className="truncate">Preview</span>
+              </Button>
+            </div>
+
+            <div className="flex w-full gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSaveForm}
+                disabled={
+                  !hasChanges ||
+                  updateFormMutation.isPending ||
+                  batchSaveFieldsMutation.isPending ||
+                  slugAvailable === false ||
+                  checkingSlug
+                }
+                className="min-w-0 flex-1 px-2 text-xs"
+              >
+                {updateFormMutation.isPending ||
+                batchSaveFieldsMutation.isPending ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 flex-shrink-0 animate-spin" />
+                ) : (
+                  <Save className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
+                )}
+                <span className="truncate">Save</span>
+                {hasVersionBreakingChanges && (
+                  <Badge
+                    variant="destructive"
+                    className="ml-1 h-3.5 px-1 text-[9px] font-normal"
+                  >
+                    v+1
+                  </Badge>
+                )}
+              </Button>
+
+              {formStatus === "published" ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUnpublish}
+                    disabled={updateFormMutation.isPending}
+                    className="min-w-0 flex-1 px-2 text-xs"
+                  >
+                    <ArchiveX className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="truncate">Unpublish</span>
+                  </Button>
+                </>
+              ) : formStatus === "archived" ? (
+                <Button
+                  size="sm"
+                  onClick={handleUnarchive}
+                  disabled={updateFormMutation.isPending}
+                  className="min-w-0 flex-1 px-2 text-xs"
+                >
+                  <ArchiveX className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">Unarchive</span>
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={handlePublish}
+                  disabled={
+                    updateFormMutation.isPending ||
+                    checkingSlug ||
+                    slugAvailable === false
+                  }
+                  className="min-w-0 flex-1 px-2 text-xs"
+                >
+                  <Upload className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">Publish</span>
+                </Button>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAiDialogOpen(true)}
+                className="min-w-0 flex-1 px-2 text-xs"
+              >
+                <Sparkles className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
+                <span className="truncate">AI</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Desktop layout: all buttons inline */}
+          <div className="hidden gap-2 sm:flex">
+            <Button variant="outline" size="default" asChild>
+              <Link href={`/forms/${slug}/responses`} prefetch={true}>
+                <BarChart3 className="mr-2 h-4 w-4" />
+                Responses
+              </Link>
+            </Button>
+
+            <Button variant="outline" size="default" onClick={handleCopyLink}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copy Link
+            </Button>
+
+            <Button
+              variant="outline"
+              size="default"
+              onClick={() => window.open(`/f/${form.slug}`, "_blank")}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Preview
+            </Button>
+
+            <Button
+              variant="outline"
+              size="default"
+              onClick={handleSaveForm}
+              disabled={
+                !hasChanges ||
+                updateFormMutation.isPending ||
+                batchSaveFieldsMutation.isPending
+              }
+            >
+              {updateFormMutation.isPending ||
+              batchSaveFieldsMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
+              Save
+              {hasVersionBreakingChanges && (
+                <Badge
+                  variant="destructive"
+                  className="ml-2 h-4 px-1 text-[10px] font-normal"
+                >
+                  v+1
+                </Badge>
+              )}
+            </Button>
+
+            {formStatus === "published" ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="default"
+                  onClick={handleUnpublish}
+                  disabled={updateFormMutation.isPending}
+                >
+                  <ArchiveX className="mr-2 h-4 w-4" />
+                  Unpublish
+                </Button>
+                <Button
+                  variant="outline"
+                  size="default"
+                  onClick={handleArchive}
+                  disabled={updateFormMutation.isPending}
+                >
+                  <Archive className="mr-2 h-4 w-4" />
+                  Archive
+                </Button>
+              </>
+            ) : formStatus === "archived" ? (
+              <Button
+                size="default"
+                onClick={handleUnarchive}
+                disabled={updateFormMutation.isPending}
+              >
+                <ArchiveX className="mr-2 h-4 w-4" />
+                Unarchive
+              </Button>
+            ) : (
+              <Button
+                size="default"
+                onClick={handlePublish}
+                disabled={
+                  updateFormMutation.isPending ||
+                  checkingSlug ||
+                  slugAvailable === false
+                }
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Publish
+              </Button>
             )}
-          </Button>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr,380px] lg:gap-6">
+      <div className="grid w-full gap-4 overflow-hidden lg:grid-cols-[minmax(0,1fr),minmax(280px,380px)] lg:gap-6">
         {/* Main Content */}
-        <div className="space-y-3 sm:space-y-4">
+        <div className="min-w-0 space-y-3 sm:space-y-4">
           {/* Form Settings */}
-          <Card>
+          <Card className="overflow-hidden">
             <CardHeader className="pb-3 sm:pb-4">
               <CardTitle className="flex items-center gap-1.5 text-base sm:text-lg">
-                <Settings className="h-4 w-4" />
+                <Settings className="h-4 w-4 flex-shrink-0" />
                 Form Settings
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 sm:space-y-4">
-              <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
-                <div className="space-y-2">
+              <div className="grid w-full gap-3 sm:gap-4 md:grid-cols-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="form-name" className="text-sm">
                     Form Name
                   </Label>
@@ -1221,22 +1399,69 @@ export default function FormBuilderPage() {
                     id="form-name"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
+                    onFocus={(e) => {
+                      if (isFirstFocus) {
+                        e.target.select();
+                        setIsFirstFocus(false);
+                      }
+                    }}
                     placeholder="My Form"
+                    className="w-full"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="form-slug">Slug (URL Path)</Label>
-                  <Input
-                    id="form-slug"
-                    value={formSlug}
-                    onChange={(e) => {
-                      setFormSlug(e.target.value);
-                      setSlugManuallyEdited(true);
-                    }}
-                    placeholder="my-form"
-                  />
+                <div className="min-w-0 space-y-2">
+                  <Label htmlFor="form-slug" className="text-sm">
+                    Slug (URL Path)
+                  </Label>
+                  <div className="relative w-full">
+                    <Input
+                      id="form-slug"
+                      value={formSlug}
+                      onChange={(e) => {
+                        // Auto-convert spaces to hyphens, keep hyphens and alphanumeric
+                        const value = e.target.value
+                          .toLowerCase()
+                          .replace(/\s+/g, "-"); // Replace spaces with hyphens only
+                        setFormSlug(value);
+                        setSlugManuallyEdited(true);
+                      }}
+                      placeholder="my-form"
+                      className={`w-full ${
+                        slugAvailable === false
+                          ? "border-destructive pr-10"
+                          : slugAvailable === true && formSlug !== form?.slug
+                            ? "border-green-500 pr-10"
+                            : ""
+                      }`}
+                    />
+                    {checkingSlug && (
+                      <div className="absolute top-1/2 right-3 -translate-y-1/2">
+                        <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
+                      </div>
+                    )}
+                    {!checkingSlug &&
+                      slugAvailable === true &&
+                      formSlug !== form?.slug && (
+                        <div className="absolute top-1/2 right-3 -translate-y-1/2">
+                          <Check className="h-4 w-4 text-green-500" />
+                        </div>
+                      )}
+                    {!checkingSlug && slugAvailable === false && (
+                      <div className="absolute top-1/2 right-3 -translate-y-1/2">
+                        <span className="text-destructive text-xs font-medium">
+                          ✕
+                        </span>
+                      </div>
+                    )}
+                  </div>
                   <p className="text-muted-foreground text-xs">
-                    URL: /f/{formSlug || "your-slug"}
+                    {slugAvailable === false ? (
+                      <span className="text-destructive">
+                        This slug is already taken
+                      </span>
+                    ) : (
+                      <>URL: /f/{formSlug || "your-slug"}</>
+                    )}
                   </p>
                 </div>
               </div>
@@ -1369,22 +1594,22 @@ export default function FormBuilderPage() {
           </Card>
 
           {/* Form Fields */}
-          <Card>
+          <Card className="overflow-hidden">
             <CardHeader className="pb-3 sm:pb-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="text-base sm:text-lg">
                   Form Fields
                 </CardTitle>
-                <div className="flex gap-2">
+                <div className="flex w-full gap-2 sm:w-auto">
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => setAiDialogOpen(true)}
-                    className="relative flex-1 text-xs sm:flex-initial"
+                    className="relative min-w-0 flex-1 text-xs sm:flex-initial"
                   >
-                    <Sparkles className="mr-1.5 h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
+                    <Sparkles className="mr-1.5 h-3 w-3 flex-shrink-0 sm:mr-2 sm:h-3.5 sm:w-3.5" />
                     <span className="hidden sm:inline">AI Generate</span>
-                    <span className="sm:hidden">AI</span>
+                    <span className="truncate sm:hidden">AI</span>
                     <kbd className="bg-muted ml-2 hidden rounded border px-1.5 py-0.5 font-mono text-xs lg:inline-block">
                       ⌘K
                     </kbd>
@@ -1392,16 +1617,16 @@ export default function FormBuilderPage() {
                   <Button
                     size="sm"
                     onClick={handleOpenCreateField}
-                    className="flex-1 text-xs sm:flex-initial"
+                    className="min-w-0 flex-1 text-xs sm:flex-initial"
                   >
-                    <Plus className="mr-1.5 h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
+                    <Plus className="mr-1.5 h-3 w-3 flex-shrink-0 sm:mr-2 sm:h-3.5 sm:w-3.5" />
                     <span className="hidden sm:inline">Add Field</span>
-                    <span className="sm:hidden">Add</span>
+                    <span className="truncate sm:hidden">Add</span>
                   </Button>
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-x-auto">
               {activeFields.length === 0 ? (
                 <div className="text-muted-foreground py-12 text-center">
                   <Sparkles className="text-muted-foreground/50 mx-auto mb-4 h-12 w-12" />
@@ -2097,17 +2322,30 @@ function SortableFieldItem({
   );
 }
 
+// Cache for parsed field options to avoid repeated JSON parsing
+const fieldOptionsCache = new Map<
+  string,
+  Array<{ label: string; isDefault?: boolean }>
+>();
+
 function renderPreviewField(field: FormField) {
   // Parse options if they exist
   let options: Array<{ label: string; isDefault?: boolean }> = [];
   if (field.options) {
-    try {
-      options = JSON.parse(field.options) as Array<{
-        label: string;
-        isDefault?: boolean;
-      }>;
-    } catch {
-      options = [];
+    // Check cache first
+    const cacheKey = `${field.id}-${field.options}`;
+    if (fieldOptionsCache.has(cacheKey)) {
+      options = fieldOptionsCache.get(cacheKey)!;
+    } else {
+      try {
+        options = JSON.parse(field.options) as Array<{
+          label: string;
+          isDefault?: boolean;
+        }>;
+        fieldOptionsCache.set(cacheKey, options);
+      } catch {
+        options = [];
+      }
     }
   }
 

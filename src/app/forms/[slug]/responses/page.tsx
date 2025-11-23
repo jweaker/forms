@@ -34,7 +34,6 @@ import {
   Trash,
   MoreVertical,
   FileText,
-  Calendar,
   User,
   Star,
   Filter,
@@ -110,8 +109,12 @@ export default function ResponsesPage() {
   const utils = api.useUtils();
 
   // Get responses data - must be before any conditional returns (Rules of Hooks)
-  const responses = responsesData?.items ?? [];
   const totalResponses = responsesData?.total ?? 0;
+
+  // Memoize responses to avoid changing reference on every render
+  const responses = useMemo(() => {
+    return responsesData?.items ?? [];
+  }, [responsesData?.items]);
 
   // Use filtered version fields if filtering, otherwise use current form fields
   const displayFields = filteredFormVersion?.fields ?? form?.fields ?? [];
@@ -161,6 +164,31 @@ export default function ResponsesPage() {
       });
     });
   }, [responses, searchQuery]);
+
+  // Memoize parsed field values to avoid repeated JSON parsing on every render
+  const processedResponses = useMemo(() => {
+    return filteredResponses.map((response) => {
+      const fieldValues = new Map<number, string>();
+      for (const responseField of response.responseFields) {
+        // Parse value - could be JSON array or string
+        let displayValue: string;
+        try {
+          const parsed = JSON.parse(responseField.value) as string[] | string;
+          if (Array.isArray(parsed)) {
+            // Multi-select: join array values
+            displayValue = parsed.join(", ");
+          } else {
+            displayValue = responseField.value;
+          }
+        } catch {
+          // Not JSON, use as-is
+          displayValue = responseField.value;
+        }
+        fieldValues.set(responseField.formFieldId, displayValue);
+      }
+      return { ...response, fieldValues };
+    });
+  }, [filteredResponses]);
 
   const handleDeleteResponse = (responseId: number) => {
     if (confirm("Are you sure you want to delete this response?")) {
@@ -317,63 +345,47 @@ export default function ResponsesPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-2 sm:mb-6 sm:gap-4 md:grid-cols-3">
+      <div className="mb-4 grid grid-cols-3 gap-2 sm:mb-6 sm:gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2 sm:p-6">
-            <CardTitle className="text-xs font-medium sm:text-sm">
-              Total Responses
+          <CardHeader className="p-2 pb-1 sm:p-6 sm:pb-2">
+            <CardTitle className="text-[10px] font-medium sm:text-sm">
+              Responses
             </CardTitle>
-            <FileText className="text-muted-foreground h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </CardHeader>
-          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-xl font-bold sm:text-2xl">
+          <CardContent className="p-2 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-base font-bold sm:text-2xl">
               {totalResponses}
             </div>
-            {versionFilter !== "all" && (
-              <p className="text-muted-foreground mt-1 text-xs">
-                For version {versionFilter}
-              </p>
-            )}
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2 sm:p-6">
-            <CardTitle className="text-xs font-medium sm:text-sm">
-              {versionFilter === "all" ? "Current Version" : "Viewing Version"}
+          <CardHeader className="p-2 pb-1 sm:p-6 sm:pb-2">
+            <CardTitle className="text-[10px] font-medium sm:text-sm">
+              Version
             </CardTitle>
-            <Calendar className="text-muted-foreground h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </CardHeader>
-          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-xl font-bold sm:text-2xl">
+          <CardContent className="p-2 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-base font-bold sm:text-2xl">
               v
               {versionFilter === "all"
                 ? (form.currentVersion ?? 1)
                 : versionFilter}
             </div>
-            <p className="text-muted-foreground mt-1 text-xs">
-              {displayFields.length} field
-              {displayFields.length !== 1 ? "s" : ""}
-            </p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2 sm:p-6">
-            <CardTitle className="text-xs font-medium sm:text-sm">
+          <CardHeader className="p-2 pb-1 sm:p-6 sm:pb-2">
+            <CardTitle className="text-[10px] font-medium sm:text-sm">
               Status
             </CardTitle>
+          </CardHeader>
+          <CardContent className="p-2 pt-0 sm:p-6 sm:pt-0">
             <Badge
               variant={form.status === "published" ? "default" : "secondary"}
               className="text-[10px] sm:text-xs"
             >
               {form.status}
             </Badge>
-          </CardHeader>
-          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-muted-foreground text-xs sm:text-sm">
-              {form.status === "published"
-                ? "Accepting responses"
-                : "Not accepting responses"}
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -402,25 +414,7 @@ export default function ResponsesPage() {
             <>
               {/* Mobile Card View */}
               <div className="space-y-3 md:hidden">
-                {filteredResponses.map((response) => {
-                  const fieldValues = new Map<number, string>();
-                  for (const responseField of response.responseFields) {
-                    let displayValue: string;
-                    try {
-                      const parsed = JSON.parse(responseField.value) as
-                        | string[]
-                        | string;
-                      if (Array.isArray(parsed)) {
-                        displayValue = parsed.join(", ");
-                      } else {
-                        displayValue = responseField.value;
-                      }
-                    } catch {
-                      displayValue = responseField.value;
-                    }
-                    fieldValues.set(responseField.formFieldId, displayValue);
-                  }
-
+                {processedResponses.map((response) => {
                   return (
                     <Card key={response.id} className="border">
                       <CardContent className="p-4">
@@ -501,7 +495,7 @@ export default function ResponsesPage() {
                               {field.label}
                             </p>
                             <p className="mt-1 line-clamp-2 text-sm">
-                              {fieldValues.get(field.id) ?? "-"}
+                              {response.fieldValues.get(field.id) ?? "-"}
                             </p>
                           </div>
                         ))}
@@ -548,32 +542,7 @@ export default function ResponsesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredResponses.map((response) => {
-                      // Create map of field ID to display value
-                      const fieldValues = new Map<number, string>();
-                      for (const responseField of response.responseFields) {
-                        // Parse value - could be JSON array or string
-                        let displayValue: string;
-                        try {
-                          const parsed = JSON.parse(responseField.value) as
-                            | string[]
-                            | string;
-                          if (Array.isArray(parsed)) {
-                            // Multi-select: join array values
-                            displayValue = parsed.join(", ");
-                          } else {
-                            displayValue = responseField.value;
-                          }
-                        } catch {
-                          // Not JSON, use as-is
-                          displayValue = responseField.value;
-                        }
-                        fieldValues.set(
-                          responseField.formFieldId,
-                          displayValue,
-                        );
-                      }
-
+                    {processedResponses.map((response) => {
                       return (
                         <TableRow key={response.id}>
                           <TableCell>
@@ -634,7 +603,7 @@ export default function ResponsesPage() {
                           {displayFields.slice(0, 2).map((field) => (
                             <TableCell key={field.id}>
                               <div className="max-w-[200px] truncate text-sm">
-                                {fieldValues.get(field.id) ?? "-"}
+                                {response.fieldValues.get(field.id) ?? "-"}
                               </div>
                             </TableCell>
                           ))}

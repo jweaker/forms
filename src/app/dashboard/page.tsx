@@ -43,9 +43,11 @@ import {
   copyToClipboard,
   getPublicFormUrl,
 } from "~/lib/utils";
+import { generateFunnyName } from "~/lib/funny-names";
 import { UserMenu } from "~/components/user-menu";
 import { MySubmissions } from "./my-submissions";
 import { ThemeToggle } from "~/components/theme-toggle";
+import { authClient } from "~/server/better-auth/client";
 
 type ViewMode = "grid" | "list";
 type DashboardTab = "forms" | "submissions";
@@ -57,6 +59,14 @@ export default function DashboardPage() {
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>("forms");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [searchQuery, setSearchQuery] = useState("");
+  const { data: session, isPending: sessionLoading } = authClient.useSession();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!sessionLoading && !session) {
+      router.push("/");
+    }
+  }, [session, sessionLoading, router]);
 
   const { data: forms, isLoading } = api.forms.list.useQuery(undefined, {
     staleTime: 60 * 1000, // Cache for 60 seconds
@@ -113,7 +123,7 @@ export default function DashboardPage() {
 
   const handleCreateForm = useCallback(() => {
     createFormMutation.mutate({
-      name: "Untitled Form",
+      name: generateFunnyName(),
       description: "",
       isPublic: false,
       allowAnonymous: true,
@@ -179,7 +189,8 @@ export default function DashboardPage() {
     );
   }, [forms?.items, searchQuery]);
 
-  if (isLoading) {
+  // Show loading while checking auth or loading forms
+  if (sessionLoading || isLoading) {
     return (
       <div className="container mx-auto max-w-7xl px-4 py-6">
         <div className="mb-6 flex items-center justify-between gap-4">
@@ -197,6 +208,11 @@ export default function DashboardPage() {
         </div>
       </div>
     );
+  }
+
+  // Don't render dashboard if not authenticated
+  if (!session) {
+    return null;
   }
 
   return (

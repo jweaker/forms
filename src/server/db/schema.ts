@@ -73,7 +73,10 @@ export const formFields = sqliteTable(
       .notNull(),
     updatedAt: d.integer({ mode: "timestamp" }).$onUpdate(() => new Date()),
   }),
-  (t) => [],
+  (t) => [
+    index("form_fields_form_id_idx").on(t.formId),
+    index("form_fields_order_idx").on(t.order),
+  ],
 );
 // export const formResponsesFields = sqliteTable();
 export const formResponses = sqliteTable(
@@ -127,7 +130,10 @@ export const formResponseFields = sqliteTable(
       .notNull(),
     updatedAt: d.integer({ mode: "timestamp" }).$onUpdate(() => new Date()),
   }),
-  (t) => [index("form_response_fields_response_id_idx").on(t.formResponseId)],
+  (t) => [
+    index("form_response_fields_response_id_idx").on(t.formResponseId),
+    index("form_response_fields_field_id_idx").on(t.formFieldId),
+  ],
 );
 
 // Form response history - stores snapshots when a response is edited

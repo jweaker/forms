@@ -1,0 +1,3 @@
+-- This migration file was missing but is referenced in the journal
+-- Creating empty file to maintain migration continuity
+-- The changes from this migration may have already been applied manually

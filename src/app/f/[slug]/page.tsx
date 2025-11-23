@@ -77,9 +77,11 @@ export default function PublicFormPage() {
   const [comment, setComment] = useState<string>("");
   const [hoveredStar, setHoveredStar] = useState<number>(0);
 
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
+
   // Initialize form data with default values
   useEffect(() => {
-    if (form && Object.keys(formData).length === 0) {
+    if (form && !isInitialized) {
       const initialData: Record<number, string | boolean | string[]> = {};
       form.fields.forEach((field) => {
         let options: Array<{ label: string; isDefault?: boolean }> = [];
@@ -123,8 +125,9 @@ export default function PublicFormPage() {
         }
       });
       setFormData(initialData);
+      setIsInitialized(true);
     }
-  }, [form, formData]);
+  }, [form, isInitialized]);
 
   const handleFieldChange = (
     fieldId: number,

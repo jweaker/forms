@@ -23,6 +23,34 @@ function generateSlug(name: string): string {
 
 export const formsRouter = createTRPCRouter({
   /**
+   * Check if a slug is available
+   */
+  checkSlugAvailability: protectedProcedure
+    .input(
+      z.object({
+        slug: z.string().min(1).max(256),
+        excludeFormId: z.number().optional(), // When editing, exclude current form
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const normalizedSlug = generateSlug(input.slug);
+
+      const existing = await ctx.db.query.forms.findFirst({
+        where: input.excludeFormId
+          ? and(
+              eq(forms.slug, normalizedSlug),
+              sql`${forms.id} != ${input.excludeFormId}`,
+            )
+          : eq(forms.slug, normalizedSlug),
+      });
+
+      return {
+        available: !existing,
+        normalizedSlug,
+      };
+    }),
+
+  /**
    * Get all forms created by the authenticated user
    */
   list: protectedProcedure
@@ -55,20 +83,29 @@ export const formsRouter = createTRPCRouter({
         },
       });
 
-      // Get response counts for each form
-      const itemsWithCounts = await Promise.all(
-        items.map(async (item) => {
-          const responseCountResult = await ctx.db
-            .select({ count: sql<number>`count(*)` })
-            .from(formResponses)
-            .where(eq(formResponses.formId, item.id));
+      // Get response counts for all forms in a single query
+      const responseCounts = await ctx.db
+        .select({
+          formId: formResponses.formId,
+          count: sql<number>`count(*)`,
+        })
+        .from(formResponses)
+        .where(
+          sql`${formResponses.formId} IN (${sql.join(
+            items.map((i) => sql`${i.id}`),
+            sql`, `,
+          )})`,
+        )
+        .groupBy(formResponses.formId);
 
-          return {
-            ...item,
-            responseCount: responseCountResult[0]?.count ?? 0,
-          };
-        }),
+      const responseCountMap = new Map(
+        responseCounts.map((rc) => [rc.formId, rc.count]),
       );
+
+      const itemsWithCounts = items.map((item) => ({
+        ...item,
+        responseCount: responseCountMap.get(item.id) ?? 0,
+      }));
 
       // Get total count for pagination
       const countResult = await ctx.db
@@ -239,7 +276,7 @@ export const formsRouter = createTRPCRouter({
       // Handle slug changes
       let slug = existing.slug;
       if (input.slug !== undefined && input.slug !== existing.slug) {
-        // User provided a custom slug
+        // User explicitly provided a different slug
         slug = generateSlug(input.slug);
 
         // Check if slug is already taken by another form
@@ -258,8 +295,13 @@ export const formsRouter = createTRPCRouter({
               "This slug is already taken. Please choose a different one.",
           });
         }
-      } else if (input.name && input.name !== existing.name && !input.slug) {
-        // Auto-generate slug from name if name changed but no custom slug provided
+      } else if (
+        input.slug === undefined &&
+        input.name &&
+        input.name !== existing.name
+      ) {
+        // Frontend didn't send slug, but name changed
+        // This means: auto-generate slug from name (for new forms)
         slug = generateSlug(input.name);
         let counter = 1;
 
@@ -275,12 +317,14 @@ export const formsRouter = createTRPCRouter({
           counter++;
         }
       }
+      // else: slug provided and matches existing, OR slug not provided and name unchanged
+      // In both cases, keep existing slug
 
       const [updated] = await ctx.db
         .update(forms)
         .set({
           name: input.name,
-          slug: slug !== existing.slug ? slug : undefined,
+          slug: slug, // Always set slug (even if unchanged)
           description: input.description,
           isPublic: input.isPublic,
           allowAnonymous: input.allowAnonymous,
