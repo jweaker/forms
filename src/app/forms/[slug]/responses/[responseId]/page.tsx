@@ -21,14 +21,14 @@ import { Label } from "~/components/ui/label";
 import { Badge } from "~/components/ui/badge";
 import { Separator } from "~/components/ui/separator";
 import { useState } from "react";
-import { useSession } from "next-auth/react";
+import { authClient } from "~/server/better-auth/client";
 
 export default function ResponseDetailPage() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
   const responseId = parseInt(params.responseId as string);
-  const { data: session } = useSession();
+  const { data: session } = authClient.useSession();
   const [showHistory, setShowHistory] = useState(false);
   const [expandedVersions, setExpandedVersions] = useState<Set<number>>(
     new Set(),
@@ -40,6 +40,7 @@ export default function ResponseDetailPage() {
 
   // Check if current user is the form owner
   const isFormOwner = session?.user?.id === response?.form.createdById;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isSubmitter = session?.user?.id === response?.createdById;
 
   // Get the form version that matches this response

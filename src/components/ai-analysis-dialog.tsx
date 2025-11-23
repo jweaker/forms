@@ -41,7 +41,7 @@ interface AnalysisResult {
     type: "bar" | "line" | "pie" | "area";
     title: string;
     description?: string;
-    data: any[];
+    data: Record<string, unknown>[];
     config: {
       xAxisKey?: string;
       yAxisKey?: string;
@@ -68,7 +68,7 @@ interface AnalysisResult {
 }
 
 interface AIAnalysisDialogProps {
-  formStructure: any;
+  formStructure: Record<string, unknown>;
   csvData?: string;
   getCSVData?: () => Promise<string>;
   trigger?: React.ReactNode;
@@ -230,7 +230,10 @@ export function AIAnalysisDialog({
                 {graph.data.map((entry, idx) => (
                   <Cell
                     key={`cell-${idx}`}
-                    fill={entry.fill ?? COLORS[idx % COLORS.length]}
+                    fill={
+                      (entry.fill as string | undefined) ??
+                      COLORS[idx % COLORS.length]
+                    }
                   />
                 ))}
               </Pie>

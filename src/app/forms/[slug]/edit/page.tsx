@@ -211,7 +211,7 @@ export default function FormBuilderPage() {
   const [fieldOptions, setFieldOptions] = useState<
     { label: string; isDefault: boolean }[]
   >([{ label: "", isDefault: false }]);
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   // New field configuration
   const [fieldAllowMultiple, setFieldAllowMultiple] = useState(false);
   const [fieldSelectionLimit, setFieldSelectionLimit] = useState<string>("");
@@ -871,6 +871,7 @@ export default function FormBuilderPage() {
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleUnpublish = async () => {
     // Currently unused - keeping for potential future use
     if (!form) return;
