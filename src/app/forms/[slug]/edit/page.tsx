@@ -668,20 +668,20 @@ export default function FormBuilderPage() {
       const updatedFields = currentFields.map((f) =>
         f.id === editingFieldId
           ? {
-              ...f,
-              ...fieldData,
-              placeholder: fieldData.placeholder ?? null,
-              helpText: fieldData.helpText ?? null,
-              regexPattern: fieldData.regexPattern ?? null,
-              validationMessage: fieldData.validationMessage ?? null,
-              options: fieldData.options ?? null,
-              allowMultiple: fieldData.allowMultiple ?? null,
-              selectionLimit: fieldData.selectionLimit ?? null,
-              minValue: fieldData.minValue ?? null,
-              maxValue: fieldData.maxValue ?? null,
-              defaultValue: fieldData.defaultValue ?? null,
-              updatedAt: new Date(),
-            }
+            ...f,
+            ...fieldData,
+            placeholder: fieldData.placeholder ?? null,
+            helpText: fieldData.helpText ?? null,
+            regexPattern: fieldData.regexPattern ?? null,
+            validationMessage: fieldData.validationMessage ?? null,
+            options: fieldData.options ?? null,
+            allowMultiple: fieldData.allowMultiple ?? null,
+            selectionLimit: fieldData.selectionLimit ?? null,
+            minValue: fieldData.minValue ?? null,
+            maxValue: fieldData.maxValue ?? null,
+            defaultValue: fieldData.defaultValue ?? null,
+            updatedAt: new Date(),
+          }
           : f,
       );
 
@@ -1262,7 +1262,7 @@ export default function FormBuilderPage() {
                 className="min-w-0 flex-1 px-2 text-xs"
               >
                 {updateFormMutation.isPending ||
-                batchSaveFieldsMutation.isPending ? (
+                  batchSaveFieldsMutation.isPending ? (
                   <Loader2 className="mr-1 h-3.5 w-3.5 flex-shrink-0 animate-spin" />
                 ) : (
                   <Save className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
@@ -1353,7 +1353,7 @@ export default function FormBuilderPage() {
               }
             >
               {updateFormMutation.isPending ||
-              batchSaveFieldsMutation.isPending ? (
+                batchSaveFieldsMutation.isPending ? (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Save className="mr-1.5 h-3.5 w-3.5" />
@@ -1413,7 +1413,7 @@ export default function FormBuilderPage() {
         <div className="min-w-0 space-y-3 sm:space-y-4">
           {/* Form Settings */}
           <Card className="overflow-hidden">
-            <CardHeader className="pb-3 sm:pb-4">
+            <CardHeader className="!pb-0">
               <CardTitle className="flex items-center gap-1.5 text-base sm:text-lg">
                 <Settings className="h-4 w-4 flex-shrink-0" />
                 Form Settings
@@ -1456,13 +1456,12 @@ export default function FormBuilderPage() {
                         setSlugManuallyEdited(true);
                       }}
                       placeholder="my-form"
-                      className={`w-full ${
-                        slugAvailable === false
-                          ? "border-destructive pr-10"
-                          : slugAvailable === true && formSlug !== form?.slug
-                            ? "border-green-500 pr-10"
-                            : ""
-                      }`}
+                      className={`w-full ${slugAvailable === false
+                        ? "border-destructive pr-10"
+                        : slugAvailable === true && formSlug !== form?.slug
+                          ? "border-green-500 pr-10"
+                          : ""
+                        }`}
                     />
                     {checkingSlug && (
                       <div className="absolute top-1/2 right-3 -translate-y-1/2">
@@ -1566,11 +1565,11 @@ export default function FormBuilderPage() {
                       value={
                         openTime
                           ? new Date(
-                              openTime.getTime() -
-                                openTime.getTimezoneOffset() * 60000,
-                            )
-                              .toISOString()
-                              .slice(0, 16)
+                            openTime.getTime() -
+                            openTime.getTimezoneOffset() * 60000,
+                          )
+                            .toISOString()
+                            .slice(0, 16)
                           : ""
                       }
                       onChange={(e) =>
@@ -1603,11 +1602,11 @@ export default function FormBuilderPage() {
                       value={
                         deadline
                           ? new Date(
-                              deadline.getTime() -
-                                deadline.getTimezoneOffset() * 60000,
-                            )
-                              .toISOString()
-                              .slice(0, 16)
+                            deadline.getTime() -
+                            deadline.getTimezoneOffset() * 60000,
+                          )
+                            .toISOString()
+                            .slice(0, 16)
                           : ""
                       }
                       onChange={(e) =>
@@ -1637,7 +1636,7 @@ export default function FormBuilderPage() {
 
           {/* Form Fields */}
           <Card className="overflow-hidden">
-            <CardHeader className="pb-3 sm:pb-4">
+            <CardHeader className="!pb-0">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="text-base sm:text-lg">
                   Form Fields
@@ -2135,8 +2134,8 @@ export default function FormBuilderPage() {
                       <strong>Active:</strong>{" "}
                       {selectedTemplate
                         ? VALIDATION_TEMPLATES[
-                            selectedTemplate as keyof typeof VALIDATION_TEMPLATES
-                          ].message
+                          selectedTemplate as keyof typeof VALIDATION_TEMPLATES
+                        ].message
                         : fieldValidationMessage || "Custom validation"}
                     </p>
                   </div>
