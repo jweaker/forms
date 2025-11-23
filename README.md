@@ -1,6 +1,6 @@
-# VibeForm
+# vibeForming
 
-Built for the HUB200 GEW Coding Competition.
+Built for the HUB200 GEW Coding Competition by Karar Haitham (AI) and Ahmed Shaheed (Full Stack).
 
 A modern form builder with AI-powered generation, advanced validation, and response analytics.
 
