@@ -33,6 +33,7 @@ A modern form builder with AI-powered generation, advanced validation, and respo
 - Filter by form version
 - Response edit history
 - Anonymous or authenticated submissions
+- AI-powered response analysis with charts and insights
 
 **Authentication**
 
