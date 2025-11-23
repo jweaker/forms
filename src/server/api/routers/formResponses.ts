@@ -516,7 +516,7 @@ export const formResponsesRouter = createTRPCRouter({
     }),
 
   /**
-   * Get a single response by ID (owner only)
+   * Get a single response by ID (form owner or submitter)
    */
   getById: protectedProcedure
     .input(z.object({ responseId: z.number() }))
@@ -547,8 +547,11 @@ export const formResponsesRouter = createTRPCRouter({
         });
       }
 
-      // Verify form ownership
-      if (response.form.createdById !== ctx.session.user.id) {
+      // Allow access if user is either the form owner OR the submitter
+      const isFormOwner = response.form.createdById === ctx.session.user.id;
+      const isSubmitter = response.createdById === ctx.session.user.id;
+
+      if (!isFormOwner && !isSubmitter) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "You do not have permission to view this response",
@@ -597,7 +600,7 @@ export const formResponsesRouter = createTRPCRouter({
    * Export responses as CSV data (owner only)
    */
   export: protectedProcedure
-    .input(z.object({ formId: z.number() }))
+    .input(z.object({ formId: z.number(), version: z.number().optional() }))
     .query(async ({ ctx, input }) => {
       // Verify form ownership
       const form = await ctx.db.query.forms.findFirst({
@@ -619,9 +622,14 @@ export const formResponsesRouter = createTRPCRouter({
         });
       }
 
-      // Get all responses
+      // Get all responses (optionally filtered by version)
       const responses = await ctx.db.query.formResponses.findMany({
-        where: eq(formResponses.formId, input.formId),
+        where: input.version
+          ? and(
+              eq(formResponses.formId, input.formId),
+              eq(formResponses.formVersion, input.version),
+            )
+          : eq(formResponses.formId, input.formId),
         orderBy: [desc(formResponses.createdAt)],
         with: {
           responseFields: {
@@ -793,7 +801,7 @@ export const formResponsesRouter = createTRPCRouter({
     }),
 
   /**
-   * Get edit history for a response (owner only)
+   * Get edit history for a response (form owner or submitter)
    */
   getHistory: protectedProcedure
     .input(z.object({ responseId: z.number() }))
@@ -813,8 +821,11 @@ export const formResponsesRouter = createTRPCRouter({
         });
       }
 
-      // Verify form ownership
-      if (response.form.createdById !== ctx.session.user.id) {
+      // Allow access if user is either the form owner OR the submitter
+      const isFormOwner = response.form.createdById === ctx.session.user.id;
+      const isSubmitter = response.createdById === ctx.session.user.id;
+
+      if (!isFormOwner && !isSubmitter) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "You do not have permission to view this response history",

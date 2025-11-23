@@ -661,7 +661,6 @@ export default function FormBuilderPage() {
       };
 
       setLocalFields([...currentFields, newField]);
-      toast.success("Field added (not saved yet)");
       setFieldDialogOpen(false);
       resetFieldDialog();
     } else if (editingFieldId) {
@@ -687,7 +686,6 @@ export default function FormBuilderPage() {
       );
 
       setLocalFields(updatedFields);
-      toast.success("Field updated (not saved yet)");
       setFieldDialogOpen(false);
       resetFieldDialog();
     }
@@ -698,7 +696,6 @@ export default function FormBuilderPage() {
     const currentFields = localFields ?? form?.fields ?? [];
     const updatedFields = currentFields.filter((f) => f.id !== fieldId);
     setLocalFields(updatedFields);
-    toast.success("Field deleted (not saved yet)");
   };
 
   const handleDuplicateField = (fieldId: number) => {
@@ -719,7 +716,6 @@ export default function FormBuilderPage() {
     };
 
     setLocalFields([...currentFields, duplicatedField]);
-    toast.success("Field duplicated (not saved yet)");
   };
 
   const handleSaveForm = async () => {
@@ -815,8 +811,41 @@ export default function FormBuilderPage() {
 
   const handlePublish = async () => {
     if (!form) return;
-    // Save any pending changes first, then publish
+
+    // Validate slug is available before publishing
+    if (slugAvailable === false) {
+      toast.error("Cannot publish: slug is already taken");
+      return;
+    }
+
     try {
+      // Save fields if there are pending changes
+      if (localFields !== null) {
+        await batchSaveFieldsMutation.mutateAsync({
+          formId: form.id,
+          fields: localFields.map((f, index) => ({
+            id: f.id > 0 ? f.id : undefined, // Only include ID for existing fields
+            label: f.label,
+            type: f.type,
+            placeholder: f.placeholder,
+            helpText: f.helpText,
+            required: f.required,
+            order: index,
+            regexPattern: f.regexPattern,
+            validationMessage: f.validationMessage,
+            allowMultiple: f.allowMultiple ?? undefined,
+            selectionLimit: f.selectionLimit ?? undefined,
+            minValue: f.minValue ?? undefined,
+            maxValue: f.maxValue ?? undefined,
+            defaultValue: f.defaultValue ?? undefined,
+            options: f.options ?? undefined,
+          })),
+          openTime,
+          deadline,
+        });
+      }
+
+      // Now publish with all metadata
       const updatedForm = await updateFormMutation.mutateAsync({
         id: form.id,
         name: formName,
@@ -828,6 +857,8 @@ export default function FormBuilderPage() {
         allowMultipleSubmissions,
         allowEditing,
         collectFeedback,
+        openTime,
+        deadline,
       });
       setFormStatus("published");
 
@@ -932,7 +963,6 @@ export default function FormBuilderPage() {
 
         const newOrder = arrayMove(currentFields, oldIndex, newIndex);
         setLocalFields(newOrder);
-        toast.success("Fields reordered (not saved yet)");
       }
     },
     [localFields, form?.fields],
@@ -949,11 +979,19 @@ export default function FormBuilderPage() {
   const handleApplyValidationTemplate = (
     template: keyof typeof VALIDATION_TEMPLATES,
   ) => {
+    // If clicking the same template, deselect it
+    if (selectedTemplate === template) {
+      setFieldRegexPattern("");
+      setFieldValidationMessage("");
+      setSelectedTemplate(null);
+      return;
+    }
+
+    // Apply the new template
     const validationTemplate = VALIDATION_TEMPLATES[template];
     setFieldRegexPattern(validationTemplate.pattern);
     setFieldValidationMessage(validationTemplate.message);
     setSelectedTemplate(template);
-    toast.success(`Applied ${validationTemplate.label} validation`);
   };
 
   const handleAIGenerate = async () => {

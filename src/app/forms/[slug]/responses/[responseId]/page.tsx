@@ -21,12 +21,14 @@ import { Label } from "~/components/ui/label";
 import { Badge } from "~/components/ui/badge";
 import { Separator } from "~/components/ui/separator";
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 
 export default function ResponseDetailPage() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
   const responseId = parseInt(params.responseId as string);
+  const { data: session } = useSession();
   const [showHistory, setShowHistory] = useState(false);
   const [expandedVersions, setExpandedVersions] = useState<Set<number>>(
     new Set(),
@@ -35,6 +37,10 @@ export default function ResponseDetailPage() {
   const { data: response, isLoading } = api.formResponses.getById.useQuery({
     responseId,
   });
+
+  // Check if current user is the form owner
+  const isFormOwner = session?.user?.id === response?.form.createdById;
+  const isSubmitter = session?.user?.id === response?.createdById;
 
   // Get the form version that matches this response
   const responseVersion = response?.formVersion ?? 1;
@@ -165,14 +171,17 @@ export default function ResponseDetailPage() {
             Response Details
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleDelete}
-          className="h-8 w-8 sm:h-10 sm:w-10"
-        >
-          <Trash className="h-4 w-4" />
-        </Button>
+        {/* Only show delete button to form owners */}
+        {isFormOwner && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleDelete}
+            className="h-8 w-8 sm:h-10 sm:w-10"
+          >
+            <Trash className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       {/* Main Content Card */}

@@ -44,6 +44,7 @@ import Link from "next/link";
 import { formatDate, formatRelativeTime } from "~/lib/utils";
 import { useState, useMemo } from "react";
 import { Input } from "~/components/ui/input";
+import { AIAnalysisDialog } from "~/components/ai-analysis-dialog";
 
 export default function ResponsesPage() {
   const params = useParams();
@@ -201,6 +202,7 @@ export default function ResponsesPage() {
     try {
       const { data, headers } = await utils.client.formResponses.export.query({
         formId: form.id,
+        version: versionFilter === "all" ? undefined : parseInt(versionFilter),
       });
 
       // Convert data to CSV format
@@ -240,6 +242,48 @@ export default function ResponsesPage() {
     } catch {
       toast.error("Failed to export responses");
     }
+  };
+
+  const getCSVData = async () => {
+    if (!form?.id) return "";
+    try {
+      const { data, headers } = await utils.client.formResponses.export.query({
+        formId: form.id,
+        version: versionFilter === "all" ? undefined : parseInt(versionFilter),
+      });
+
+      const csvRows = [];
+      csvRows.push(headers.join(","));
+      for (const row of data) {
+        const values = headers.map((header) => {
+          const value = row[header] ?? "";
+          if (
+            value.includes(",") ||
+            value.includes('"') ||
+            value.includes("\n")
+          ) {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          return value;
+        });
+        csvRows.push(values.join(","));
+      }
+      return csvRows.join("\n");
+    } catch {
+      return "";
+    }
+  };
+
+  const getFormStructure = () => {
+    if (!form) return {};
+    return {
+      name: form.name,
+      fields: displayFields.map((field) => ({
+        label: field.label,
+        type: field.type,
+        options: field.options,
+      })),
+    };
   };
 
   if (formLoading || responsesLoading) {
@@ -310,6 +354,11 @@ export default function ResponsesPage() {
               </SelectContent>
             </Select>
           )}
+          <AIAnalysisDialog
+            formStructure={getFormStructure()}
+            csvData=""
+            getCSVData={getCSVData}
+          />
           <Button
             variant="outline"
             asChild
@@ -345,27 +394,23 @@ export default function ResponsesPage() {
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-3 gap-2 sm:mb-6 sm:gap-4">
-        <Card>
-          <CardHeader className="p-2 pb-1 sm:p-6 sm:pb-2">
-            <CardTitle className="text-[10px] font-medium sm:text-sm">
+      <div className="mb-3 grid grid-cols-3 gap-2 sm:mb-4 sm:gap-2.5">
+        <Card className="border-border/40">
+          <CardContent className="flex flex-col gap-0.5 p-2 sm:gap-1 sm:p-2.5">
+            <div className="text-muted-foreground text-[9px] font-medium tracking-wide uppercase sm:text-[10px]">
               Responses
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-2 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-base font-bold sm:text-2xl">
+            </div>
+            <div className="text-lg leading-none font-bold sm:text-2xl">
               {totalResponses}
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="p-2 pb-1 sm:p-6 sm:pb-2">
-            <CardTitle className="text-[10px] font-medium sm:text-sm">
+        <Card className="border-border/40">
+          <CardContent className="flex flex-col gap-0.5 p-2 sm:gap-1 sm:p-2.5">
+            <div className="text-muted-foreground text-[9px] font-medium tracking-wide uppercase sm:text-[10px]">
               Version
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-2 pt-0 sm:p-6 sm:pt-0">
-            <div className="text-base font-bold sm:text-2xl">
+            </div>
+            <div className="text-lg leading-none font-bold sm:text-2xl">
               v
               {versionFilter === "all"
                 ? (form.currentVersion ?? 1)
@@ -373,16 +418,14 @@ export default function ResponsesPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="p-2 pb-1 sm:p-6 sm:pb-2">
-            <CardTitle className="text-[10px] font-medium sm:text-sm">
+        <Card className="border-border/40">
+          <CardContent className="flex flex-col gap-0.5 p-2 sm:gap-1 sm:p-2.5">
+            <div className="text-muted-foreground text-[9px] font-medium tracking-wide uppercase sm:text-[10px]">
               Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-2 pt-0 sm:p-6 sm:pt-0">
+            </div>
             <Badge
               variant={form.status === "published" ? "default" : "secondary"}
-              className="text-[10px] sm:text-xs"
+              className="mt-0.5 w-fit text-[9px] sm:text-[10px]"
             >
               {form.status}
             </Badge>
