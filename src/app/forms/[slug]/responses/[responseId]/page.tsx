@@ -206,39 +206,40 @@ export default function ResponseDetailPage() {
         </CardHeader>
 
         <CardContent className="divide-y p-0">
-          {/* Rating and Comments Section */}
-          {(response.rating ?? response.comments) && (
-            <div className="space-y-3 p-4 sm:space-y-4 sm:p-6">
-              {response.rating && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium sm:text-sm">Rating</p>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <Star
-                        key={star}
-                        className={`h-4 w-4 sm:h-5 sm:w-5 ${
-                          star <= response.rating!
-                            ? "fill-yellow-400 text-yellow-400"
-                            : "text-muted-foreground/30"
-                        }`}
-                      />
-                    ))}
-                    <span className="text-muted-foreground ml-2 text-xs sm:text-sm">
-                      {response.rating} / 5
-                    </span>
+          {/* Rating and Comments Section - Only show if form has collectFeedback enabled */}
+          {response.form.collectFeedback !== false &&
+            (response.rating ?? response.comments) && (
+              <div className="space-y-3 p-4 sm:space-y-4 sm:p-6">
+                {response.rating && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium sm:text-sm">Rating</p>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`h-4 w-4 sm:h-5 sm:w-5 ${
+                            star <= response.rating!
+                              ? "fill-yellow-400 text-yellow-400"
+                              : "text-muted-foreground/30"
+                          }`}
+                        />
+                      ))}
+                      <span className="text-muted-foreground ml-2 text-xs sm:text-sm">
+                        {response.rating} / 5
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
-              {response.comments && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium sm:text-sm">Comments</p>
-                  <p className="text-muted-foreground text-sm leading-relaxed">
-                    {response.comments}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+                {response.comments && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium sm:text-sm">Comments</p>
+                    <p className="text-muted-foreground text-sm leading-relaxed">
+                      {response.comments}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
           {/* Form Responses */}
           {response.responseFields.length === 0 ? (
@@ -436,50 +437,51 @@ export default function ResponseDetailPage() {
                               </div>
                             </div>
 
-                            {/* Show rating and comments if they existed */}
-                            {(historyData.rating ?? historyData.comments) && (
-                              <div
-                                className={`mb-3 space-y-2 rounded-md p-3 text-sm ${
-                                  changedFieldIds.has(-1) ||
-                                  changedFieldIds.has(-2)
-                                    ? "border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/20"
-                                    : "bg-background"
-                                }`}
-                              >
-                                {historyData.rating && (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-muted-foreground">
-                                      Rating:
-                                    </span>
-                                    <div className="flex items-center gap-1">
-                                      {[1, 2, 3, 4, 5].map((i) => (
-                                        <Star
-                                          key={i}
-                                          className={`h-3 w-3 ${
-                                            i <= historyData.rating!
-                                              ? "fill-yellow-400 text-yellow-400"
-                                              : "text-muted-foreground/30"
-                                          }`}
-                                        />
-                                      ))}
-                                      <span className="text-muted-foreground ml-1 text-xs">
-                                        {historyData.rating}/5
+                            {/* Show rating and comments if they existed and collectFeedback is enabled */}
+                            {response.form.collectFeedback !== false &&
+                              (historyData.rating ?? historyData.comments) && (
+                                <div
+                                  className={`mb-3 space-y-2 rounded-md p-3 text-sm ${
+                                    changedFieldIds.has(-1) ||
+                                    changedFieldIds.has(-2)
+                                      ? "border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/20"
+                                      : "bg-background"
+                                  }`}
+                                >
+                                  {historyData.rating && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-muted-foreground">
+                                        Rating:
                                       </span>
+                                      <div className="flex items-center gap-1">
+                                        {[1, 2, 3, 4, 5].map((i) => (
+                                          <Star
+                                            key={i}
+                                            className={`h-3 w-3 ${
+                                              i <= historyData.rating!
+                                                ? "fill-yellow-400 text-yellow-400"
+                                                : "text-muted-foreground/30"
+                                            }`}
+                                          />
+                                        ))}
+                                        <span className="text-muted-foreground ml-1 text-xs">
+                                          {historyData.rating}/5
+                                        </span>
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
-                                {historyData.comments && (
-                                  <div>
-                                    <span className="text-muted-foreground">
-                                      Comments:
-                                    </span>
-                                    <p className="text-muted-foreground mt-1 text-xs">
-                                      {historyData.comments}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                                  )}
+                                  {historyData.comments && (
+                                    <div>
+                                      <span className="text-muted-foreground">
+                                        Comments:
+                                      </span>
+                                      <p className="text-muted-foreground mt-1 text-xs">
+                                        {historyData.comments}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                             {/* Show all fields or preview */}
                             <div className="space-y-2">

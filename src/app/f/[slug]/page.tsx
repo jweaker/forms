@@ -22,7 +22,7 @@ import { Alert, AlertDescription } from "~/components/ui/alert";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AlertCircle, Star, Github } from "lucide-react";
+import { AlertCircle, Star, GithubIcon } from "lucide-react";
 import { authClient } from "~/server/better-auth/client";
 import { MultiSelect } from "~/components/ui/multi-select";
 import { ThemeToggle } from "~/components/theme-toggle";
@@ -413,7 +413,7 @@ export default function PublicFormPage() {
                   onClick={handleSignIn}
                   className="h-8 flex-shrink-0 px-2 sm:px-4"
                 >
-                  <Github className="h-4 w-4 sm:mr-1.5" />
+                  <GithubIcon className="h-4 w-4 sm:mr-1.5" />
                   <span className="hidden sm:inline">Sign in</span>
                 </Button>
               )}
@@ -458,7 +458,7 @@ export default function PublicFormPage() {
                     onClick={handleSignIn}
                     className="w-full text-xs sm:w-auto"
                   >
-                    <Github className="mr-2 h-3.5 w-3.5" />
+                    <GithubIcon className="mr-2 h-3.5 w-3.5" />
                     Sign in with GitHub
                   </Button>
                 </AlertDescription>
@@ -499,57 +499,61 @@ export default function PublicFormPage() {
                 </div>
               ))}
 
-              {/* Rating and Comment Section */}
-              <Separator className="my-4 sm:my-6" />
+              {/* Rating and Comment Section - Only show if collectFeedback is enabled */}
+              {form.collectFeedback !== false && (
+                <>
+                  <Separator className="my-4 sm:my-6" />
 
-              <div className="space-y-3 sm:space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">
-                    Rating{" "}
-                    <span className="text-muted-foreground font-normal">
-                      (Optional)
-                    </span>
-                  </Label>
-                  <div className="flex items-center gap-1 sm:gap-1.5">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setRating(star)}
-                        onMouseEnter={() => setHoveredStar(star)}
-                        onMouseLeave={() => setHoveredStar(0)}
-                        className="transition-transform hover:scale-110 active:scale-95"
-                        aria-label={`Rate ${star} out of 5`}
-                      >
-                        <Star
-                          className={`h-6 w-6 sm:h-7 sm:w-7 ${
-                            star <= (hoveredStar || rating)
-                              ? "fill-yellow-400 text-yellow-400"
-                              : "text-muted-foreground/30"
-                          }`}
-                        />
-                      </button>
-                    ))}
+                  <div className="space-y-3 sm:space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">
+                        Rating{" "}
+                        <span className="text-muted-foreground font-normal">
+                          (Optional)
+                        </span>
+                      </Label>
+                      <div className="flex items-center gap-1 sm:gap-1.5">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setRating(star)}
+                            onMouseEnter={() => setHoveredStar(star)}
+                            onMouseLeave={() => setHoveredStar(0)}
+                            className="transition-transform hover:scale-110 active:scale-95"
+                            aria-label={`Rate ${star} out of 5`}
+                          >
+                            <Star
+                              className={`h-6 w-6 sm:h-7 sm:w-7 ${
+                                star <= (hoveredStar || rating)
+                                  ? "fill-yellow-400 text-yellow-400"
+                                  : "text-muted-foreground/30"
+                              }`}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="comment" className="text-sm font-medium">
+                        Comments{" "}
+                        <span className="text-muted-foreground font-normal">
+                          (Optional)
+                        </span>
+                      </Label>
+                      <Textarea
+                        id="comment"
+                        value={comment}
+                        onChange={(e) => setComment(e.target.value)}
+                        placeholder="Share your thoughts..."
+                        rows={3}
+                        className="resize-none text-sm"
+                      />
+                    </div>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="comment" className="text-sm font-medium">
-                    Comments{" "}
-                    <span className="text-muted-foreground font-normal">
-                      (Optional)
-                    </span>
-                  </Label>
-                  <Textarea
-                    id="comment"
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    placeholder="Share your thoughts..."
-                    rows={3}
-                    className="resize-none text-sm"
-                  />
-                </div>
-              </div>
+                </>
+              )}
 
               <Button
                 type="submit"

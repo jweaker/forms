@@ -443,15 +443,16 @@ export default function ResponsesPage() {
                                   </Badge>
                                 </>
                               )}
-                              {response.rating && (
-                                <>
-                                  <span>•</span>
-                                  <div className="flex items-center gap-1">
-                                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                                    <span>{response.rating}/5</span>
-                                  </div>
-                                </>
-                              )}
+                              {form.collectFeedback !== false &&
+                                response.rating && (
+                                  <>
+                                    <span>•</span>
+                                    <div className="flex items-center gap-1">
+                                      <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                                      <span>{response.rating}/5</span>
+                                    </div>
+                                  </>
+                                )}
                             </div>
                           </div>
                           <DropdownMenu>
@@ -530,7 +531,9 @@ export default function ResponsesPage() {
                       {availableVersions.length > 1 && (
                         <TableHead>Version</TableHead>
                       )}
-                      <TableHead>Rating</TableHead>
+                      {form.collectFeedback !== false && (
+                        <TableHead>Rating</TableHead>
+                      )}
                       <TableHead>IP Address</TableHead>
                       {displayFields.slice(0, 2).map((field) => (
                         <TableHead key={field.id}>{field.label}</TableHead>
@@ -579,22 +582,24 @@ export default function ResponsesPage() {
                               </Badge>
                             </TableCell>
                           )}
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              {response.rating ? (
-                                <>
-                                  <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                                  <span className="text-sm">
-                                    {response.rating}/5
+                          {form.collectFeedback !== false && (
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {response.rating ? (
+                                  <>
+                                    <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                                    <span className="text-sm">
+                                      {response.rating}/5
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">
+                                    -
                                   </span>
-                                </>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">
-                                  -
-                                </span>
-                              )}
-                            </div>
-                          </TableCell>
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
                           <TableCell>
                             <span className="text-muted-foreground font-mono text-xs">
                               {response.ipAddress ?? "-"}

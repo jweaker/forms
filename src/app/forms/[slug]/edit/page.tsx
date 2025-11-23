@@ -192,6 +192,7 @@ export default function FormBuilderPage() {
   const [allowMultipleSubmissions, setAllowMultipleSubmissions] =
     useState(true);
   const [allowEditing, setAllowEditing] = useState(false);
+  const [collectFeedback, setCollectFeedback] = useState(true);
   const [openTime, setOpenTime] = useState<Date | null>(null);
   const [deadline, setDeadline] = useState<Date | null>(null);
 
@@ -242,6 +243,7 @@ export default function FormBuilderPage() {
       setAllowAnonymous(form.allowAnonymous);
       setAllowMultipleSubmissions(form.allowMultipleSubmissions ?? true);
       setAllowEditing(form.allowEditing ?? false);
+      setCollectFeedback(form.collectFeedback ?? true);
       setOpenTime(form.openTime ?? null);
       setDeadline(form.deadline ?? null);
 
@@ -256,7 +258,7 @@ export default function FormBuilderPage() {
 
       setIsFirstFocus(true);
     }
-  }, [form?.id, form?.slug, isFirstLoad]); // Depend on id, slug, and isFirstLoad
+  }, [form, isFirstLoad]); // Depend on entire form object and isFirstLoad
 
   // Helper function to generate slug from name
   const generateSlugFromName = (name: string) => {
@@ -340,6 +342,7 @@ export default function FormBuilderPage() {
       allowAnonymous !== form.allowAnonymous ||
       allowMultipleSubmissions !== (form.allowMultipleSubmissions ?? true) ||
       allowEditing !== (form.allowEditing ?? false) ||
+      collectFeedback !== (form.collectFeedback ?? true) ||
       openTime?.getTime() !== form.openTime?.getTime() ||
       deadline?.getTime() !== form.deadline?.getTime();
 
@@ -356,6 +359,7 @@ export default function FormBuilderPage() {
     allowAnonymous,
     allowMultipleSubmissions,
     allowEditing,
+    collectFeedback,
     openTime,
     deadline,
     localFields,
@@ -737,6 +741,7 @@ export default function FormBuilderPage() {
         allowAnonymous !== form.allowAnonymous ||
         allowMultipleSubmissions !== (form.allowMultipleSubmissions ?? true) ||
         allowEditing !== (form.allowEditing ?? false) ||
+        collectFeedback !== (form.collectFeedback ?? true) ||
         openTime?.getTime() !== form.openTime?.getTime() ||
         deadline?.getTime() !== form.deadline?.getTime();
 
@@ -753,6 +758,7 @@ export default function FormBuilderPage() {
           allowAnonymous,
           allowMultipleSubmissions,
           allowEditing,
+          collectFeedback,
           openTime,
           deadline,
         });
@@ -821,6 +827,7 @@ export default function FormBuilderPage() {
         allowAnonymous,
         allowMultipleSubmissions,
         allowEditing,
+        collectFeedback,
       });
       setFormStatus("published");
 
@@ -834,6 +841,7 @@ export default function FormBuilderPage() {
   };
 
   const handleUnpublish = async () => {
+    // Currently unused - keeping for potential future use
     if (!form) return;
     try {
       const updatedForm = await updateFormMutation.mutateAsync({
@@ -845,6 +853,8 @@ export default function FormBuilderPage() {
         isPublic: true,
         allowAnonymous,
         allowMultipleSubmissions,
+        allowEditing,
+        collectFeedback,
       });
       setFormStatus("draft");
 
@@ -865,7 +875,7 @@ export default function FormBuilderPage() {
         name: formName,
         slug: formSlug,
         description: formDescription || undefined,
-        status: "draft",
+        status: "archived",
         isPublic: true,
         allowAnonymous,
         allowMultipleSubmissions,
@@ -1234,12 +1244,12 @@ export default function FormBuilderPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleUnpublish}
+                    onClick={handleArchive}
                     disabled={updateFormMutation.isPending}
                     className="min-w-0 flex-1 px-2 text-xs"
                   >
-                    <ArchiveX className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
-                    <span className="truncate">Unpublish</span>
+                    <Archive className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="truncate">Archive</span>
                   </Button>
                 </>
               ) : formStatus === "archived" ? (
@@ -1267,45 +1277,35 @@ export default function FormBuilderPage() {
                   <span className="truncate">Publish</span>
                 </Button>
               )}
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAiDialogOpen(true)}
-                className="min-w-0 flex-1 px-2 text-xs"
-              >
-                <Sparkles className="mr-1 h-3.5 w-3.5 flex-shrink-0" />
-                <span className="truncate">AI</span>
-              </Button>
             </div>
           </div>
 
-          {/* Desktop layout: all buttons inline */}
-          <div className="hidden gap-2 sm:flex">
-            <Button variant="outline" size="default" asChild>
+          {/* Desktop layout: all buttons inline, wrap on medium screens */}
+          <div className="hidden flex-wrap items-center justify-end gap-2 sm:flex">
+            <Button variant="outline" size="sm" asChild>
               <Link href={`/forms/${slug}/responses`} prefetch={true}>
-                <BarChart3 className="mr-2 h-4 w-4" />
+                <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
                 Responses
               </Link>
             </Button>
 
-            <Button variant="outline" size="default" onClick={handleCopyLink}>
-              <Copy className="mr-2 h-4 w-4" />
-              Copy Link
+            <Button variant="outline" size="sm" onClick={handleCopyLink}>
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              Copy
             </Button>
 
             <Button
               variant="outline"
-              size="default"
+              size="sm"
               onClick={() => window.open(`/f/${form.slug}`, "_blank")}
             >
-              <ExternalLink className="mr-2 h-4 w-4" />
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
               Preview
             </Button>
 
             <Button
               variant="outline"
-              size="default"
+              size="sm"
               onClick={handleSaveForm}
               disabled={
                 !hasChanges ||
@@ -1315,15 +1315,15 @@ export default function FormBuilderPage() {
             >
               {updateFormMutation.isPending ||
               batchSaveFieldsMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Save className="mr-2 h-4 w-4" />
+                <Save className="mr-1.5 h-3.5 w-3.5" />
               )}
               Save
               {hasVersionBreakingChanges && (
                 <Badge
                   variant="destructive"
-                  className="ml-2 h-4 px-1 text-[10px] font-normal"
+                  className="ml-1.5 h-3.5 px-1 text-[9px] font-normal"
                 >
                   v+1
                 </Badge>
@@ -1334,35 +1334,26 @@ export default function FormBuilderPage() {
               <>
                 <Button
                   variant="outline"
-                  size="default"
-                  onClick={handleUnpublish}
-                  disabled={updateFormMutation.isPending}
-                >
-                  <ArchiveX className="mr-2 h-4 w-4" />
-                  Unpublish
-                </Button>
-                <Button
-                  variant="outline"
-                  size="default"
+                  size="sm"
                   onClick={handleArchive}
                   disabled={updateFormMutation.isPending}
                 >
-                  <Archive className="mr-2 h-4 w-4" />
+                  <Archive className="mr-1.5 h-3.5 w-3.5" />
                   Archive
                 </Button>
               </>
             ) : formStatus === "archived" ? (
               <Button
-                size="default"
+                size="sm"
                 onClick={handleUnarchive}
                 disabled={updateFormMutation.isPending}
               >
-                <ArchiveX className="mr-2 h-4 w-4" />
+                <ArchiveX className="mr-1.5 h-3.5 w-3.5" />
                 Unarchive
               </Button>
             ) : (
               <Button
-                size="default"
+                size="sm"
                 onClick={handlePublish}
                 disabled={
                   updateFormMutation.isPending ||
@@ -1370,7 +1361,7 @@ export default function FormBuilderPage() {
                   slugAvailable === false
                 }
               >
-                <Upload className="mr-2 h-4 w-4" />
+                <Upload className="mr-1.5 h-3.5 w-3.5" />
                 Publish
               </Button>
             )}
@@ -1511,6 +1502,18 @@ export default function FormBuilderPage() {
                 <Switch
                   checked={allowEditing}
                   onCheckedChange={setAllowEditing}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Collect Feedback</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Ask users for rating and comments
+                  </p>
+                </div>
+                <Switch
+                  checked={collectFeedback}
+                  onCheckedChange={setCollectFeedback}
                 />
               </div>
               <Separator />

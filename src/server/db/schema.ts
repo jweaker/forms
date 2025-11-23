@@ -19,6 +19,7 @@ export const forms = sqliteTable(
       .integer({ mode: "boolean" })
       .default(sql`0`)
       .notNull(),
+    collectFeedback: d.integer({ mode: "boolean" }).default(true).notNull(),
     openTime: d.integer({ mode: "timestamp" }),
     deadline: d.integer({ mode: "timestamp" }),
     currentVersion: d.integer({ mode: "number" }).default(1).notNull(),

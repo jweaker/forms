@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import { Github } from "lucide-react";
+import { GithubIcon } from "lucide-react";
 import { ThemeToggle } from "~/components/theme-toggle";
 
 export default async function Home() {
@@ -58,7 +58,7 @@ export default async function Home() {
                   redirect(res.url);
                 }}
               >
-                <Github className="mr-2 h-5 w-5" />
+                <GithubIcon className="mr-2 h-5 w-5" />
                 Sign in with GitHub
               </Button>
             </form>

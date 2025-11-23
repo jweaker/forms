@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { formFields, forms } from "~/server/db/schema";
+import { sanitizeInput } from "~/lib/utils";
 
 export const formFieldsRouter = createTRPCRouter({
   /**
@@ -55,6 +56,15 @@ export const formFieldsRouter = createTRPCRouter({
         });
       }
 
+      // Sanitize inputs
+      const label = sanitizeInput(input.label, 256) ?? "Untitled Field";
+      const placeholder = sanitizeInput(input.placeholder, 256) ?? undefined;
+      const helpText = sanitizeInput(input.helpText, 1000) ?? undefined;
+      const regexPattern = sanitizeInput(input.regexPattern, 500) ?? undefined;
+      const validationMessage =
+        sanitizeInput(input.validationMessage, 256) ?? undefined;
+      const defaultValue = sanitizeInput(input.defaultValue, 1000) ?? undefined;
+
       // Get the highest order value to append new field at the end
       const existingFields = await ctx.db.query.formFields.findMany({
         where: eq(formFields.formId, input.formId),
@@ -69,19 +79,19 @@ export const formFieldsRouter = createTRPCRouter({
         .insert(formFields)
         .values({
           formId: input.formId,
-          label: input.label,
+          label,
           type: input.type,
-          placeholder: input.placeholder,
-          helpText: input.helpText,
+          placeholder,
+          helpText,
           required: input.required,
           order: nextOrder,
-          regexPattern: input.regexPattern,
-          validationMessage: input.validationMessage,
+          regexPattern,
+          validationMessage,
           allowMultiple: input.allowMultiple,
           selectionLimit: input.selectionLimit,
           minValue: input.minValue,
           maxValue: input.maxValue,
-          defaultValue: input.defaultValue,
+          defaultValue,
           // Store options as JSON string
           options: input.options ? JSON.stringify(input.options) : null,
         })

@@ -13,6 +13,8 @@ import {
   forms,
   formResponseHistory,
 } from "~/server/db/schema";
+import { sanitizeInput } from "~/lib/utils";
+import { isRateLimited } from "~/server/api/helpers/rate-limit";
 
 export const formResponsesRouter = createTRPCRouter({
   /**
@@ -35,6 +37,20 @@ export const formResponsesRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // Extract IP address from headers
+      const forwardedFor = ctx.headers.get("x-forwarded-for");
+      const realIp = ctx.headers.get("x-real-ip");
+      const ipAddress = forwardedFor?.split(",")[0] ?? realIp ?? "unknown";
+
+      // Rate limiting: 10 submissions per hour per IP (reasonable limit)
+      const rateLimitKey = ctx.session?.user?.id ?? ipAddress;
+      if (isRateLimited(rateLimitKey)) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many submissions. Please try again later.",
+        });
+      }
+
       // Get form to check if submissions are allowed
       const form = await ctx.db.query.forms.findFirst({
         where: eq(forms.id, input.formId),
@@ -208,10 +224,13 @@ export const formResponsesRouter = createTRPCRouter({
       }
 
       // Create the response
-      // Extract IP address from headers
-      const forwardedFor = ctx.headers.get("x-forwarded-for");
-      const realIp = ctx.headers.get("x-real-ip");
-      const ipAddress = forwardedFor?.split(",")[0] ?? realIp ?? "unknown";
+      // Sanitize user inputs
+      const submitterEmail = input.submitterEmail
+        ? (sanitizeInput(input.submitterEmail, 255) ?? undefined)
+        : undefined;
+      const comments = input.comments
+        ? (sanitizeInput(input.comments, 5000) ?? undefined)
+        : undefined;
 
       const [response] = await ctx.db
         .insert(formResponses)
@@ -219,10 +238,10 @@ export const formResponsesRouter = createTRPCRouter({
           formId: input.formId,
           formVersion: form.currentVersion, // Store the current form version
           createdById: ctx.session?.user?.id,
-          submitterEmail: input.submitterEmail,
+          submitterEmail,
           isAnonymous: input.isAnonymous,
           rating: input.rating,
-          comments: input.comments,
+          comments,
           ipAddress,
         })
         .returning();

@@ -47,3 +47,35 @@ export function truncate(str: string, length: number): string {
   if (str.length <= length) return str;
   return str.slice(0, length) + "...";
 }
+
+/**
+ * Basic HTML sanitization to prevent XSS attacks
+ * Escapes HTML special characters
+ */
+export function sanitizeHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
+    .replace(/\//g, "&#x2F;");
+}
+
+/**
+ * Sanitize user input for safe storage
+ * Trims whitespace and limits length
+ */
+export function sanitizeInput(
+  input: string | null | undefined,
+  maxLength?: number,
+): string | null {
+  if (!input) return null;
+
+  let sanitized = input.trim();
+  if (maxLength !== undefined && sanitized.length > maxLength) {
+    sanitized = sanitized.substring(0, maxLength);
+  }
+
+  return sanitized || null;
+}

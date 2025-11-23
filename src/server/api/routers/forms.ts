@@ -9,16 +9,15 @@ import {
   formFields,
   formVersionHistory,
 } from "~/server/db/schema";
+import { sanitizeInput } from "~/lib/utils";
+import {
+  generateBaseSlug,
+  ensureUniqueSlug,
+} from "~/server/api/helpers/slug-utils";
 
-// Helper function to generate slug from name
+// Helper function to generate slug from name (deprecated - use generateBaseSlug)
 function generateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, "") // Remove special characters
-    .replace(/\s+/g, "-") // Replace spaces with hyphens
-    .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
-    .substring(0, 256); // Limit to schema length
+  return generateBaseSlug(name);
 }
 
 export const formsRouter = createTRPCRouter({
@@ -154,8 +153,8 @@ export const formsRouter = createTRPCRouter({
       // Get total response count
       const countResult = await ctx.db
         .select({ responseCount: sql<number>`count(*)` })
-        .from(forms)
-        .where(eq(forms.id, input.id));
+        .from(formResponses)
+        .where(eq(formResponses.formId, input.id));
 
       return {
         ...form,
@@ -205,28 +204,26 @@ export const formsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Generate unique slug
-      let slug = generateSlug(input.name);
-      let counter = 1;
+      // Sanitize inputs
+      const name = sanitizeInput(input.name, 256) ?? "Untitled Form";
+      const description = sanitizeInput(input.description, 5000);
 
-      // Check if slug exists, append counter if needed
-      while (true) {
+      // Generate unique slug efficiently (no while loops!)
+      const baseSlug = generateBaseSlug(name);
+      const slug = await ensureUniqueSlug(baseSlug, async (candidateSlug) => {
         const existing = await ctx.db.query.forms.findFirst({
-          where: eq(forms.slug, slug),
+          where: eq(forms.slug, candidateSlug),
+          columns: { id: true },
         });
-
-        if (!existing) break;
-
-        slug = `${generateSlug(input.name)}-${counter}`;
-        counter++;
-      }
+        return !!existing;
+      });
 
       const [form] = await ctx.db
         .insert(forms)
         .values({
-          name: input.name,
+          name,
           slug,
-          description: input.description,
+          description,
           isPublic: input.isPublic,
           allowAnonymous: input.allowAnonymous,
           allowEditing: input.allowEditing,
@@ -252,6 +249,7 @@ export const formsRouter = createTRPCRouter({
         allowAnonymous: z.boolean().optional(),
         allowMultipleSubmissions: z.boolean().optional(),
         allowEditing: z.boolean().optional(),
+        collectFeedback: z.boolean().optional(),
         status: z.enum(["draft", "published", "archived"]).optional(),
         openTime: z.date().nullable().optional(),
         deadline: z.date().nullable().optional(),
@@ -272,6 +270,15 @@ export const formsRouter = createTRPCRouter({
           message: "Form not found",
         });
       }
+
+      // Sanitize inputs
+      const name = input.name
+        ? (sanitizeInput(input.name, 256) ?? undefined)
+        : undefined;
+      const description =
+        input.description !== undefined
+          ? (sanitizeInput(input.description, 5000) ?? undefined)
+          : undefined;
 
       // Handle slug changes
       let slug = existing.slug;
@@ -295,26 +302,29 @@ export const formsRouter = createTRPCRouter({
               "This slug is already taken. Please choose a different one.",
           });
         }
-      } else if (
-        input.slug === undefined &&
-        input.name &&
-        input.name !== existing.name
-      ) {
+      } else if (input.slug === undefined && name && name !== existing.name) {
         // Frontend didn't send slug, but name changed
         // This means: auto-generate slug from name (for new forms)
-        slug = generateSlug(input.name);
+        slug = generateSlug(name);
         let counter = 1;
 
-        // Check if new slug exists
-        while (true) {
+        // Check if new slug exists (max 100 attempts)
+        while (counter < 100) {
           const slugExists = await ctx.db.query.forms.findFirst({
             where: and(eq(forms.slug, slug), sql`${forms.id} != ${input.id}`),
           });
 
           if (!slugExists) break;
 
-          slug = `${generateSlug(input.name)}-${counter}`;
+          slug = `${generateSlug(name)}-${counter}`;
           counter++;
+        }
+
+        if (counter >= 100) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Unable to generate unique slug",
+          });
         }
       }
       // else: slug provided and matches existing, OR slug not provided and name unchanged
@@ -323,13 +333,14 @@ export const formsRouter = createTRPCRouter({
       const [updated] = await ctx.db
         .update(forms)
         .set({
-          name: input.name,
+          name,
           slug: slug, // Always set slug (even if unchanged)
-          description: input.description,
+          description: description ?? undefined,
           isPublic: input.isPublic,
           allowAnonymous: input.allowAnonymous,
           allowMultipleSubmissions: input.allowMultipleSubmissions,
           allowEditing: input.allowEditing,
+          collectFeedback: input.collectFeedback,
           status: input.status,
           openTime: input.openTime !== undefined ? input.openTime : undefined,
           deadline: input.deadline !== undefined ? input.deadline : undefined,
@@ -676,19 +687,14 @@ export const formsRouter = createTRPCRouter({
       }
 
       // Generate unique slug for duplicate
-      let slug = `${original.slug}-copy`;
-      let counter = 1;
-
-      while (true) {
+      const baseSlug = `${original.slug}-copy`;
+      const slug = await ensureUniqueSlug(baseSlug, async (candidateSlug) => {
         const existing = await ctx.db.query.forms.findFirst({
-          where: eq(forms.slug, slug),
+          where: eq(forms.slug, candidateSlug),
+          columns: { id: true },
         });
-
-        if (!existing) break;
-
-        slug = `${original.slug}-copy-${counter}`;
-        counter++;
-      }
+        return !!existing;
+      });
 
       // Create new form
       const [newForm] = await ctx.db
@@ -705,9 +711,29 @@ export const formsRouter = createTRPCRouter({
         })
         .returning();
 
-      // TODO: Copy fields and options
-      // This would require importing formFields and formFieldOptions schemas
-      // and creating the fields with their options
+      // Copy all fields with their properties
+      if (original.fields.length > 0) {
+        await ctx.db.insert(formFields).values(
+          original.fields.map((field) => ({
+            formId: newForm!.id,
+            label: field.label,
+            type: field.type,
+            placeholder: field.placeholder,
+            helpText: field.helpText,
+            required: field.required,
+            order: field.order,
+            regexPattern: field.regexPattern,
+            validationMessage: field.validationMessage,
+            allowMultiple: field.allowMultiple,
+            selectionLimit: field.selectionLimit,
+            minValue: field.minValue,
+            maxValue: field.maxValue,
+            defaultValue: field.defaultValue,
+            options: field.options, // Already a JSON string
+            version: 1, // Reset to version 1 for new form
+          })),
+        );
+      }
 
       return newForm;
     }),
@@ -741,8 +767,8 @@ export const formsRouter = createTRPCRouter({
       // Get various statistics
       const [totalResponses] = await ctx.db
         .select({ count: sql<number>`count(*)` })
-        .from(forms)
-        .where(eq(forms.id, input.id));
+        .from(formResponses)
+        .where(eq(formResponses.formId, input.id));
 
       // TODO: Add more statistics like:
       // - Anonymous vs authenticated responses
